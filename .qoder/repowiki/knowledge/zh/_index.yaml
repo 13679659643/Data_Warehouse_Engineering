@@ -1,0 +1,50 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: zh-CN
+branch: Q0DeR-MaG1C-BrAnCh-Fo2-NoN-GiT-Or-No-C0MmIt
+exported_at: "2026-06-04T07:28:43Z"
+modules:
+    "":
+        dir_name: 数仓工程 AI 协作助手 (DWH Copilot)
+        title: 数仓工程 AI 协作助手 (DWH Copilot)
+        scope:
+            - data_warehouse_engineering_code_copilot/
+            - .qoder\README.md
+            - .qoder\agents\dwh-model-reviewer.md
+            - .qoder\agents\dwh-performance-reviewer.md
+            - .qoder\agents\dwh-sql-reviewer.md
+            - .qoder\agents\dwh-version-tracker.md
+            - .qoder\skills\dwe\SKILL.md
+            - .qoder\skills\dwe\assets\log-template.md
+            - .qoder\skills\dwe\assets\spec-template.md
+            - .qoder\skills\dwe\assets\tasks-template.md
+            - .qoder\skills\dwe\assets\validation-spec-template.md
+            - .qoder\skills\dwe\references\knowledge-index.md
+            - .qoder\skills\dwe\references\rules-index.md
+            - .qoder\specs\dwe-copilot-to-agent.md
+            - data_warehouse_engineering_code_copilot\agents\copilot-prompt.md
+            - data_warehouse_engineering_code_copilot\agents\model-reviewer.md
+            - data_warehouse_engineering_code_copilot\agents\performance-reviewer.md
+            - data_warehouse_engineering_code_copilot\agents\sql-reviewer.md
+            - data_warehouse_engineering_code_copilot\agents\version-tracker.md
+            - data_warehouse_engineering_code_copilot\changes\templates\log.md
+            - data_warehouse_engineering_code_copilot\changes\templates\spec.md
+            - data_warehouse_engineering_code_copilot\changes\templates\tasks.md
+            - data_warehouse_engineering_code_copilot\changes\templates\validation-spec.md
+            - data_warehouse_engineering_code_copilot\knowledge\dimension-modeling-tips.md
+            - data_warehouse_engineering_code_copilot\knowledge\etl-patterns.md
+            - data_warehouse_engineering_code_copilot\knowledge\index.md
+            - data_warehouse_engineering_code_copilot\knowledge\performance-tips.md
+            - data_warehouse_engineering_code_copilot\knowledge\sql-patterns.md
+            - data_warehouse_engineering_code_copilot\rules\data-quality.md
+            - data_warehouse_engineering_code_copilot\rules\domain-rules.md
+            - data_warehouse_engineering_code_copilot\rules\modeling-standards.md
+            - data_warehouse_engineering_code_copilot\rules\project-context.md
+            - data_warehouse_engineering_code_copilot\rules\scheduling-standards.md
+            - data_warehouse_engineering_code_copilot\rules\security.md
+            - data_warehouse_engineering_code_copilot\rules\sql-style.md
+            - data_warehouse_engineering_code_copilot\目录结构和设计说明.md
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []
