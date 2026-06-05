@@ -1,19 +1,65 @@
 # 知识卡导出索引文件
 schema_version: 1
 locale: zh-CN
-branch: Q0DeR-MaG1C-BrAnCh-Fo2-NoN-GiT-Or-No-C0MmIt
-exported_at: "2026-06-04T07:28:43Z"
+branch: main
+exported_at: "2026-06-04T09:14:09Z"
 modules:
     "":
         dir_name: 数仓工程 AI 协作助手 (DWH Copilot)
         title: 数仓工程 AI 协作助手 (DWH Copilot)
         scope:
+            - ai-ppt-generator/
             - data_warehouse_engineering_code_copilot/
+            - .qoder\AI Agent核心概念.md
             - .qoder\README.md
             - .qoder\agents\dwh-model-reviewer.md
             - .qoder\agents\dwh-performance-reviewer.md
             - .qoder\agents\dwh-sql-reviewer.md
             - .qoder\agents\dwh-version-tracker.md
+            - .qoder\repowiki\knowledge\zh\_index.yaml
+            - .qoder\repowiki\knowledge\zh\数仓工程 AI 协作助手 (DWH Copilot)\_module.yaml
+            - .qoder\repowiki\knowledge\zh\数仓工程 AI 协作助手 (DWH Copilot)\架构设计.md
+            - .qoder\repowiki\knowledge\zh\数仓工程 AI 协作助手 (DWH Copilot)\概述.md
+            - .qoder\repowiki\knowledge\zh\数仓工程 AI 协作助手 (DWH Copilot)\编码规范.md
+            - .qoder\repowiki\zh\content\AI协作助手系统\AI协作助手系统.md
+            - .qoder\repowiki\zh\content\AI协作助手系统\AI演示文稿生成器.md
+            - .qoder\repowiki\zh\content\AI协作助手系统\主提示词系统.md
+            - .qoder\repowiki\zh\content\AI协作助手系统\命令交互机制.md
+            - .qoder\repowiki\zh\content\AI协作助手系统\角色代理系统.md
+            - .qoder\repowiki\zh\content\使用场景与最佳实践\使用场景与最佳实践.md
+            - .qoder\repowiki\zh\content\使用场景与最佳实践\性能优化工作流.md
+            - .qoder\repowiki\zh\content\使用场景与最佳实践\故障排除与调试指南.md
+            - .qoder\repowiki\zh\content\使用场景与最佳实践\新需求开发流程.md
+            - .qoder\repowiki\zh\content\使用场景与最佳实践\日常开发最佳实践.md
+            - .qoder\repowiki\zh\content\变更管理系统\Spec驱动设计.md
+            - .qoder\repowiki\zh\content\变更管理系统\任务调度系统.md
+            - .qoder\repowiki\zh\content\变更管理系统\变更管理系统.md
+            - .qoder\repowiki\zh\content\变更管理系统\变更追踪日志.md
+            - .qoder\repowiki\zh\content\快速开始.md
+            - .qoder\repowiki\zh\content\知识库系统\ETL模式库.md
+            - .qoder\repowiki\zh\content\知识库系统\SQL模式库.md
+            - .qoder\repowiki\zh\content\知识库系统\性能优化经验.md
+            - .qoder\repowiki\zh\content\知识库系统\知识库系统.md
+            - .qoder\repowiki\zh\content\知识库系统\知识飞轮机制.md
+            - .qoder\repowiki\zh\content\知识库系统\维度建模技巧.md
+            - .qoder\repowiki\zh\content\项目概述.md
+            - .qoder\repowiki\zh\content\项目约束系统\SQL编码规范.md
+            - .qoder\repowiki\zh\content\项目约束系统\业务领域规则.md
+            - .qoder\repowiki\zh\content\项目约束系统\安全合规规范.md
+            - .qoder\repowiki\zh\content\项目约束系统\项目约束系统.md
+            - .qoder\repowiki\zh\content\高级主题与扩展\模式库扩展\ETL模式扩展.md
+            - .qoder\repowiki\zh\content\高级主题与扩展\模式库扩展\SQL模式扩展.md
+            - .qoder\repowiki\zh\content\高级主题与扩展\模式库扩展\性能优化扩展.md
+            - .qoder\repowiki\zh\content\高级主题与扩展\模式库扩展\模式库扩展.md
+            - .qoder\repowiki\zh\content\高级主题与扩展\模式库扩展\维度建模扩展.md
+            - .qoder\repowiki\zh\content\高级主题与扩展\系统架构设计.md
+            - .qoder\repowiki\zh\content\高级主题与扩展\系统集成与扩展\插件化架构设计.md
+            - .qoder\repowiki\zh\content\高级主题与扩展\系统集成与扩展\模板定制化.md
+            - .qoder\repowiki\zh\content\高级主题与扩展\系统集成与扩展\第三方系统集成.md
+            - .qoder\repowiki\zh\content\高级主题与扩展\系统集成与扩展\系统集成与扩展.md
+            - .qoder\repowiki\zh\content\高级主题与扩展\系统集成与扩展\自定义Agent开发.md
+            - .qoder\repowiki\zh\content\高级主题与扩展\高级主题与扩展.md
+            - .qoder\repowiki\zh\meta\repowiki-metadata.json
             - .qoder\skills\dwe\SKILL.md
             - .qoder\skills\dwe\assets\log-template.md
             - .qoder\skills\dwe\assets\spec-template.md
@@ -22,6 +68,7 @@ modules:
             - .qoder\skills\dwe\references\knowledge-index.md
             - .qoder\skills\dwe\references\rules-index.md
             - .qoder\specs\dwe-copilot-to-agent.md
+            - ai-ppt-generator\index.html
             - data_warehouse_engineering_code_copilot\agents\copilot-prompt.md
             - data_warehouse_engineering_code_copilot\agents\model-reviewer.md
             - data_warehouse_engineering_code_copilot\agents\performance-reviewer.md
