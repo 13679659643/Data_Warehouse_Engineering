@@ -88,6 +88,21 @@ Key 列 -> 常用过滤列 -> 维度列 -> 度量列 -> 时间戳列 -> 技术�
 ### 3.3 注释规范
 - 每个字段必须添加 `COMMENT`
 - 注释清晰说明字段含义、来源、特殊取值
+- **COMMENT 字符串必须使用双引号 `"` 包裹，不要使用单引号 `'`**
+- StarRocks 官方文档全部使用双引号 `"` 包裹注释内容
+- **COMMENT 中避免使用中文括号 `（）` 和特殊符号（如 `°`）**，应使用英文括号 `()`
+
+```sql
+-- ❌ 错误：使用单引号
+`id` BIGINT COMMENT '自增主键(来源ODS的id)'
+
+-- ❌ 错误：使用中文括号
+`brand` VARCHAR(20) COMMENT "品牌:361（DWD新增字段）"
+
+-- ✅ 正确：使用双引号 + 英文括号
+`id` BIGINT COMMENT "自增主键(来源ODS的id)"
+`brand` VARCHAR(20) COMMENT "品牌:361(DWD新增字段)"
+```
 
 ---
 
@@ -102,7 +117,9 @@ PROPERTIES (
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-30",
     "dynamic_partition.end" = "3",
-    "dynamic_partition.create_history_partition" = "true"
+    "dynamic_partition.prefix" = "p",
+    "dynamic_partition.buckets" = "16",
+    "dynamic_partition.history_partition_num" = "30"
 )
 
 -- 静态分区
@@ -205,7 +222,11 @@ PROPERTIES (
 | `dynamic_partition.end` | **是** | 结束偏移（正数），提前创建未来分区 | `"3"` |
 | `dynamic_partition.prefix` | 否 | 分区名前缀 | `"p"` |
 | `dynamic_partition.buckets` | 否 | 每个动态分区的分桶数 | `"16"` |
-| `dynamic_partition.create_history_partition` | 否 | 是否创建历史分区 | `"true"` |
+| `dynamic_partition.history_partition_num` | 否 | 建表时创建多少个历史分区 | `"365"` |
+| `dynamic_partition.time_zone` | 否 | 动态分区时区 | `"Asia/Shanghai"` |
+| `dynamic_partition.start_day_of_week` | 否 | WEEK 模式下每周第一天（1=周一，7=周日） | `"1"` |
+| `dynamic_partition.start_day_of_month` | 否 | MONTH 模式下每月第一天（1~28） | `"1"` |
+| `dynamic_partition.replication_num` | 否 | 动态分区的副本数，默认与表级 replication_num 一致 | `"1"` |
 
 **工作原理**：
 - 以当前时间为基准，自动创建 `[当前+end]` 个未来分区
@@ -213,14 +234,16 @@ PROPERTIES (
 - 分区名格式：`prefix + yyyyMMdd`（DAY）、`prefix + yyyy_ww`（WEEK）、`prefix + yyyyMM`（MONTH）
 
 ```sql
--- 示例：保留最近 365 天数据，提前创建未来 3 天分区
+-- 示例：保留最近 365 天数据，提前创建未来 3 天分区，建表时创建 365 个历史分区
 PROPERTIES (
     "dynamic_partition.enable" = "true",
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-365",
     "dynamic_partition.end" = "3",
     "dynamic_partition.prefix" = "p",
-    "dynamic_partition.create_history_partition" = "true"
+    "dynamic_partition.buckets" = "16",
+    "dynamic_partition.history_partition_num" = "365",
+    "dynamic_partition.time_zone" = "Asia/Shanghai"
 )
 ```
 
@@ -268,43 +291,34 @@ PROPERTIES (
 ### 6.2 DUPLICATE KEY 模型（明细表，动态分区）
 
 ```sql
-CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_sales_361_di (
-    -- 1. Key 列（前 N 列，顺序一致）
-    `id`              BIGINT          COMMENT '自增主键（来源ODS的id）',
-    `record_id`       VARCHAR(64)     COMMENT '飞书记录唯一ID（去重依据）',
-    `brand`           VARCHAR(20)     COMMENT '品牌：361（DWD新增字段）',
-    `sku`             VARCHAR(64)     COMMENT 'SKU编码',
-    `sales_date`      DATE            COMMENT '销售日期',
+DROP TABLE IF EXISTS feishu_dwd.dwd_feishu_sales_361_d;
 
-    -- 2. 度量列
-    `qty_361sport`    BIGINT          COMMENT '361sport渠道销量',
-    `qty_china`       BIGINT          COMMENT '中国公司(361°客户)渠道销量',
-    `qty_sample`      BIGINT          COMMENT '361°寄样渠道销量',
-    `qty_staff_hk`    BIGINT          COMMENT '员工内购(香港)渠道销量',
-    `amt_361sport`    DECIMAL(18,6)   COMMENT '361sport渠道金额',
-    `amt_china`       DECIMAL(18,6)   COMMENT '中国公司(361°客户)渠道金额',
-    `amt_sample`      DECIMAL(18,6)   COMMENT '361°寄样渠道金额',
-    `amt_staff_hk`    DECIMAL(18,6)   COMMENT '员工内购(香港)渠道金额',
-
-    -- 3. 技术字段
-    `sync_time`       DATETIME        COMMENT 'ODS同步时间',
-    `insert_date`     DATETIME        COMMENT 'DWD记录插入时间',
-    `update_date`     DATETIME        COMMENT 'DWD记录更新时间',
-    `etl_batch_id`    BIGINT          COMMENT 'ETL批次ID'
+CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_sales_361_d (
+    -- 1. Key 列（前 N 列，顺序与 DUPLICATE KEY 一致）
+    `id`              BIGINT          COMMENT "自增主键(来源ODS的id)",
+    `record_id`       VARCHAR(64)     COMMENT "飞书记录唯一ID(去重依据)",
+    `brand`           VARCHAR(20)     COMMENT "品牌:361(DWD新增字段)",
+    `sku`             VARCHAR(64)     COMMENT "SKU编码",
+    `sales_date`      DATE            COMMENT "销售日期(分区键)",
+    -- 2. 度量列：4个渠道的销量（件/双，整数类型）
+    `qty_361sport`    BIGINT          COMMENT "361sport渠道销量",
+    `qty_china`       BIGINT          COMMENT "中国公司(361客户)渠道销量",
+    `qty_sample`      BIGINT          COMMENT "361寄样渠道销量",
+    `qty_staff_hk`    BIGINT          COMMENT "员工内购(香港)渠道销量",
+    -- 3. 度量列：4个渠道的金额（元，保留6位小数）
+    `amt_361sport`    DECIMAL(18,6)   COMMENT "361sport渠道金额",
+    `amt_china`       DECIMAL(18,6)   COMMENT "中国公司(361客户)渠道金额",
+    `amt_sample`      DECIMAL(18,6)   COMMENT "361寄样渠道金额",
+    `amt_staff_hk`    DECIMAL(18,6)   COMMENT "员工内购(香港)渠道金额",
+    -- 4. 技术字段
+    `sync_time`       DATETIME        COMMENT "ODS同步时间",
+    `insert_date`     DATETIME        COMMENT "DWD记录插入时间(ETL写入,增量更新用)",
+    `update_date`     DATETIME        COMMENT "DWD记录更新时间(ETL写入,增量更新用)"
 ) ENGINE=OLAP
-
--- Key 定义：顺序必须与列定义一致
 DUPLICATE KEY(`id`, `record_id`, `brand`, `sku`, `sales_date`)
-
-COMMENT 'DWD层-361品牌销售日明细表（50张分表合并）'
-
--- 分区
+COMMENT "DWD层-361品牌销售日明细表(50张分表合并,日刷新)"
 PARTITION BY RANGE(`sales_date`) ()
-
--- 分桶
 DISTRIBUTED BY HASH(`record_id`) BUCKETS 16
-
--- 属性配置
 PROPERTIES (
     "replication_num" = "1",
     "compression" = "LZ4",
@@ -315,7 +329,7 @@ PROPERTIES (
     "dynamic_partition.start" = "-365",
     "dynamic_partition.end" = "3",
     "dynamic_partition.prefix" = "p",
-    "dynamic_partition.create_history_partition" = "true"
+    "dynamic_partition.history_partition_num" = "365"
 );
 ```
 
@@ -331,3 +345,5 @@ PROPERTIES (
 | `The partition column must be key column` | 分区列不是 Key 列 | 将分区列加入 Key |
 | `Failed to create partition. Timeout` | BE 节点不足或状态异常 | 检查 BE 状态，调整副本数 |
 | `Distribution column not found` | 分桶键不存在 | 检查分桶键拼写，确保在列定义中 |
+| `Unknown properties: {dynamic_partition.create_history_partition=true}` | 使用了不存在的动态分区参数 | 改为 `dynamic_partition.history_partition_num` |
+| `Unexpected input '自增主键'` | COMMENT 使用了单引号 `'` 或中文括号 `（）` | 改用双引号 `"` 包裹注释，使用英文括号 `()` |
