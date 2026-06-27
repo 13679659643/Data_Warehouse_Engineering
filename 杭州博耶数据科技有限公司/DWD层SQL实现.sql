@@ -18,17 +18,18 @@ CREATE DATABASE IF NOT EXISTS feishu_dwd;
 -- DWD-1: feishu_dwd.dwd_feishu_sales_361_d  361品牌销售日明细表(日刷新)
 -- 来源：feishu.t_361sales_01 ~ feishu.t_361sales_50(50张分表)
 -- 粒度：品牌 + SKU + 销售日期(宽表形态，每渠道一列)
--- 引擎：StarRocks OLAP，DUPLICATE KEY 模型，按 sales_date 动态分区
+-- 引擎：StarRocks OLAP，PRIMARY KEY 模型，按 sales_date 动态分区
+-- 主键：record_id(飞书唯一ID,全局唯一) + sales_date(分区键)
 -- ============================================================
 
 -- 方案一：物化表
 DROP TABLE IF EXISTS feishu_dwd.dwd_feishu_sales_361_d;
 CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_sales_361_d (
-    `id`              BIGINT          COMMENT "自增主键(来源ODS的id)",
-    `record_id`       VARCHAR(64)     COMMENT "飞书记录唯一ID(去重依据)",
+    `record_id`       VARCHAR(64)     COMMENT "飞书记录唯一ID(主键,去重依据)",
+    `sales_date`      DATE            COMMENT "销售日期(主键,分区键)",
+    `id`              BIGINT          COMMENT "自增主键(来源ODS的id,溯源用)",
     `brand`           VARCHAR(20)     COMMENT "品牌:361(DWD新增字段)",
     `sku`             VARCHAR(64)     COMMENT "SKU编码",
-    `sales_date`      DATE            COMMENT "销售日期(分区键)",
     `qty_361sport`    BIGINT          COMMENT "361sport渠道销量",
     `qty_china`       BIGINT          COMMENT "中国公司(361客户)渠道销量",
     `qty_sample`      BIGINT          COMMENT "361寄样渠道销量",
@@ -41,21 +42,15 @@ CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_sales_361_d (
     `insert_date`     DATETIME        COMMENT "DWD记录插入时间(ETL写入)",
     `update_date`     DATETIME        COMMENT "DWD记录更新时间(ETL写入)"
 ) ENGINE=OLAP
-DUPLICATE KEY(`id`, `record_id`, `brand`, `sku`, `sales_date`)
+PRIMARY KEY(`record_id`, `sales_date`)
 COMMENT "DWD层-361品牌销售日明细表(50张分表合并,日刷新)"
-PARTITION BY RANGE(`sales_date`) ()
-DISTRIBUTED BY HASH(`record_id`) BUCKETS 16
+DISTRIBUTED BY HASH(`record_id`)
 PROPERTIES (
     "compression" = "LZ4",
+    "enable_persistent_index" = "true", -- PK模型专属优化，开启
     "fast_schema_evolution" = "true",
     "replicated_storage" = "true",
-    "replication_num" = "1",
-    "dynamic_partition.enable" = "true",
-    "dynamic_partition.time_unit" = "DAY",
-    "dynamic_partition.start" = "-365",
-    "dynamic_partition.end" = "3",
-    "dynamic_partition.prefix" = "p",
-    "dynamic_partition.history_partition_num" = "365"
+    "replication_num" = "1"
 );
 
 -- 合并50张分表(结构一致，直接UNION ALL)
@@ -170,16 +165,17 @@ FROM feishu.t_361sales_50 WHERE record_id IS NOT NULL;
 -- 来源：feishu.wd_sales_01 ~ feishu.wd_sales_50(50张分表，结构不一致)
 -- 难点：wd_sales分表结构差异(06:55字段/23:47字段/30,50:41字段)
 -- 解决：以wd_sales_06为超集基准，缺失字段补默认值(数值=0，字符="None"，日期=1970-01-01)
--- 引擎：StarRocks OLAP，DUPLICATE KEY 模型，按 sales_date 动态分区
+-- 引擎：StarRocks OLAP，PRIMARY KEY 模型，按 sales_date 动态分区
+-- 主键：record_id(飞书唯一ID,全局唯一) + sales_date(分区键)
 -- ============================================================
 
 DROP TABLE IF EXISTS feishu_dwd.dwd_feishu_sales_wd_d;
 CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_sales_wd_d (
-    `id`                  BIGINT          COMMENT "自增主键(来源ODS的id)",
-    `record_id`           VARCHAR(64)     COMMENT "飞书记录唯一ID(去重依据)",
+    `record_id`           VARCHAR(64)     COMMENT "飞书记录唯一ID(主键,去重依据)",
+    `sales_date`          DATE            COMMENT "销售日期(主键,分区键)",
+    `id`                  BIGINT          COMMENT "自增主键(来源ODS的id,溯源用)",
     `brand`               VARCHAR(20)     COMMENT "品牌:韦德(DWD新增字段)",
     `sku`                 VARCHAR(64)     COMMENT "SKU编码",
-    `sales_date`          DATE            COMMENT "销售日期(分区键)",
     `style_no`            VARCHAR(64)     COMMENT "款号(仅06/23有，其余为None)",
     `size`                VARCHAR(20)     COMMENT "尺码(仅06/23有，其余为None)",
     `first_sales_date`    DATE            COMMENT "首次销售日期(仅06/23有，其余为1970-01-01)",
@@ -235,21 +231,15 @@ CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_sales_wd_d (
     `insert_date`         DATETIME        COMMENT "DWD记录插入时间(ETL写入)",
     `update_date`         DATETIME        COMMENT "DWD记录更新时间(ETL写入)"
 ) ENGINE=OLAP
-DUPLICATE KEY(`id`, `record_id`, `brand`, `sku`, `sales_date`)
+PRIMARY KEY(`record_id`, `sales_date`)
 COMMENT "DWD层-韦德品牌销售日明细表(50张分表合并,结构对齐,日刷新)"
-PARTITION BY RANGE(`sales_date`) ()
-DISTRIBUTED BY HASH(`record_id`) BUCKETS 16
+DISTRIBUTED BY HASH(`record_id`)
 PROPERTIES (
     "compression" = "LZ4",
+    "enable_persistent_index" = "true", -- PK模型专属优化，开启
     "fast_schema_evolution" = "true",
     "replicated_storage" = "true",
-    "replication_num" = "1",
-    "dynamic_partition.enable" = "true",
-    "dynamic_partition.time_unit" = "DAY",
-    "dynamic_partition.start" = "-365",
-    "dynamic_partition.end" = "3",
-    "dynamic_partition.prefix" = "p",
-    "dynamic_partition.history_partition_num" = "365"
+    "replication_num" = "1"
 );
 
 -- 类型A：wd_sales_06(55字段，最全)- 直接映射
@@ -639,20 +629,21 @@ FROM feishu.wd_sales_30 WHERE record_id IS NOT NULL;
 -- DWD-3: feishu_dwd.dwd_feishu_sales_all_d  统一销售日明细表(长表,日刷新)
 -- 来源：feishu_dwd.dwd_feishu_sales_361_d + feishu_dwd.dwd_feishu_sales_wd_d
 -- 粒度：品牌 + SKU + 销售日期 + 渠道(每条记录=一个渠道的一笔销售)
--- 引擎：StarRocks OLAP，DUPLICATE KEY 模型，按 sales_date 动态分区
+-- 引擎：StarRocks OLAP，PRIMARY KEY 模型，按 sales_date 动态分区
+-- 主键：record_id(飞书唯一ID) + sales_date(分区键) + channel_code(渠道,同一record_id多渠道)
 -- ============================================================
 
 DROP TABLE IF EXISTS feishu_dwd.dwd_feishu_sales_all_d;
 CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_sales_all_d (
-    `id`                  BIGINT          COMMENT "自增ID",
-    `sales_date`          DATE            COMMENT "销售日期(分区键)",
-    `record_id`           VARCHAR(64)     COMMENT "飞书记录唯一ID(溯源用)",
+    `record_id`           VARCHAR(64)     COMMENT "飞书记录唯一ID(主键,溯源用)",
+    `sales_date`          DATE            COMMENT "销售日期(主键,分区键)",
+    `channel_code`        VARCHAR(50)     COMMENT "渠道编码(主键,英文标准名)",
+    `id`                  BIGINT          COMMENT "自增ID(溯源用)",
     `brand`               VARCHAR(20)     COMMENT "品牌:361/韦德",
     `sku`                 VARCHAR(64)     COMMENT "SKU编码",
     `style_no`            VARCHAR(64)     COMMENT "款号(361为None)",
     `size`                VARCHAR(20)     COMMENT "尺码(361为None)",
     `first_sales_date`    DATE            COMMENT "首次销售日期(361为1970-01-01)",
-    `channel_code`        VARCHAR(50)     COMMENT "渠道编码(英文标准名)",
     `channel_name`        VARCHAR(100)    COMMENT "渠道中文名称",
     `channel_type`        VARCHAR(30)     COMMENT "渠道类型:自营/寄售/分销/海外/平台/其他",
     `qty`                 BIGINT          COMMENT "销量(件/双,整数)",
@@ -661,21 +652,15 @@ CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_sales_all_d (
     `insert_date`         DATETIME        COMMENT "DWD记录插入时间(ETL写入)",
     `update_date`         DATETIME        COMMENT "DWD记录更新时间(ETL写入)"
 ) ENGINE=OLAP
-DUPLICATE KEY(`id`, `sales_date`)
+PRIMARY KEY(`record_id`, `sales_date`, `channel_code`)
 COMMENT "DWD层-统一销售日明细表(长表,361+韦德,渠道转行,日刷新)"
-PARTITION BY RANGE(`sales_date`) ()
-DISTRIBUTED BY HASH(`record_id`) BUCKETS 16
+DISTRIBUTED BY HASH(`record_id`)
 PROPERTIES (
     "compression" = "LZ4",
+    "enable_persistent_index" = "true", -- PK模型专属优化，开启
     "fast_schema_evolution" = "true",
     "replicated_storage" = "true",
-    "replication_num" = "1",
-    "dynamic_partition.enable" = "true",
-    "dynamic_partition.time_unit" = "DAY",
-    "dynamic_partition.start" = "-365",
-    "dynamic_partition.end" = "3",
-    "dynamic_partition.prefix" = "p",
-    "dynamic_partition.history_partition_num" = "365"
+    "replication_num" = "1"
 );
 
 -- 361品牌数据(4个渠道转行，361无first_sales_date用1970-01-01，无style_no/size用None)
@@ -842,10 +827,10 @@ CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_product_wd_d (
 ) ENGINE=OLAP
 PRIMARY KEY(`sku`)
 COMMENT "DWD层-韦德商品库清洗表(SKU粒度,无需聚合,日刷新)"
-DISTRIBUTED BY HASH(`sku`) BUCKETS 8
+DISTRIBUTED BY HASH(`sku`)
 PROPERTIES (
     "compression" = "LZ4",
-    "enable_persistent_index" = "true",
+    "enable_persistent_index" = "true", -- PK模型专属优化，开启
     "fast_schema_evolution" = "true",
     "replicated_storage" = "true",
     "replication_num" = "1"
@@ -955,10 +940,10 @@ CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_product_361_d (
 ) ENGINE=OLAP
 PRIMARY KEY(`sku`)
 COMMENT "DWD层-361商品库清洗表(SKU粒度,无需聚合,日刷新)"
-DISTRIBUTED BY HASH(`sku`) BUCKETS 8
+DISTRIBUTED BY HASH(`sku`)
 PROPERTIES (
     "compression" = "LZ4",
-    "enable_persistent_index" = "true",
+    "enable_persistent_index" = "true", -- PK模型专属优化，开启
     "fast_schema_evolution" = "true",
     "replicated_storage" = "true",
     "replication_num" = "1"
@@ -1040,10 +1025,10 @@ CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_product_all_d (
 ) ENGINE=OLAP
 PRIMARY KEY(`sku`, `brand`)
 COMMENT "DWD层-统一商品库表(361+韦德,SKU+品牌粒度,核心字段统一,日刷新)"
-DISTRIBUTED BY HASH(`sku`) BUCKETS 8
+DISTRIBUTED BY HASH(`sku`)
 PROPERTIES (
     "compression" = "LZ4",
-    "enable_persistent_index" = "true",
+    "enable_persistent_index" = "true", -- PK模型专属优化，开启
     "fast_schema_evolution" = "true",
     "replicated_storage" = "true",
     "replication_num" = "1"
@@ -1091,14 +1076,15 @@ WHERE sku <> 'None';
 -- DWD-7: feishu_dwd.dwd_feishu_inventory_d  品牌方库存清洗表(日刷新)
 -- 来源：feishu.wd_pinpaikucun(24字段)
 -- 粒度：SKU+库存更新日期
--- 引擎：StarRocks OLAP，DUPLICATE KEY 模型，按 inventory_date 动态分区
+-- 引擎：StarRocks OLAP，PRIMARY KEY 模型，按 inventory_date 动态分区
+-- 主键：id(来源ODS自增主键,单表唯一) + inventory_date(分区键)
 -- 注意：ODS中sku为小写，与其他表SKU(大写)不同，关联时需UPPER(sku)
 -- ============================================================
 
 DROP TABLE IF EXISTS feishu_dwd.dwd_feishu_inventory_d;
 CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_inventory_d (
-    `id`                  BIGINT          COMMENT "自增主键(来源ODS的id)",
-    `inventory_date`      DATE            COMMENT "品牌方库存更新日期(分区键)",
+    `id`                  BIGINT          COMMENT "自增主键(主键,来源ODS的id)",
+    `inventory_date`      DATE            COMMENT "品牌方库存更新日期(主键,分区键)",
     `record_id`           VARCHAR(64)     COMMENT "飞书记录唯一ID",
     `sku`                 VARCHAR(64)     COMMENT "sku编码(ODS小写sku,注意与SKU区分)",
     `style_no`            VARCHAR(64)     COMMENT "款号",
@@ -1121,21 +1107,15 @@ CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_inventory_d (
     `insert_date`         DATETIME        COMMENT "DWD记录插入时间(ETL写入)",
     `update_date`         DATETIME        COMMENT "DWD记录更新时间(ETL写入)"
 ) ENGINE=OLAP
-DUPLICATE KEY(`id`, `inventory_date`)
+PRIMARY KEY(`id`, `inventory_date`)
 COMMENT "DWD层-品牌方库存清洗表(SKU+日期粒度,日刷新)"
-PARTITION BY RANGE(`inventory_date`) ()
-DISTRIBUTED BY HASH(`id`) BUCKETS 8
+DISTRIBUTED BY HASH(`id`)
 PROPERTIES (
     "compression" = "LZ4",
+    "enable_persistent_index" = "true", -- PK模型专属优化，开启
     "fast_schema_evolution" = "true",
     "replicated_storage" = "true",
-    "replication_num" = "1",
-    "dynamic_partition.enable" = "true",
-    "dynamic_partition.time_unit" = "DAY",
-    "dynamic_partition.start" = "-365",
-    "dynamic_partition.end" = "3",
-    "dynamic_partition.prefix" = "p",
-    "dynamic_partition.history_partition_num" = "365"
+    "replication_num" = "1"
 );
 
 INSERT INTO feishu_dwd.dwd_feishu_inventory_d (
@@ -1195,10 +1175,10 @@ CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_otb_d (
 ) ENGINE=OLAP
 PRIMARY KEY(`ip`, `year`)
 COMMENT "DWD层-OTB订货计划清洗表(IP+年度粒度,全字段保留,日刷新)"
-DISTRIBUTED BY HASH(`ip`) BUCKETS 4
+DISTRIBUTED BY HASH(`ip`)
 PROPERTIES (
     "compression" = "LZ4",
-    "enable_persistent_index" = "true",
+    "enable_persistent_index" = "true", -- PK模型专属优化，开启
     "fast_schema_evolution" = "true",
     "replicated_storage" = "true",
     "replication_num" = "1"
