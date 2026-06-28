@@ -627,7 +627,7 @@
 | 9   | 备用款号                                  | varchar  | 备用款号                 | 款号体系   |
 | 10  | 备用款号1                                 | varchar  | 备用款号1                | 款号体系   |
 | 11  | 备用款号2                                 | varchar  | 备用款号2                | 款号体系   |
-| 12  | 码                                        | varchar  | 尺码                     | 尺码       |
+| 12  | 尺码                                        | varchar  | 尺码                     | 尺码       |
 | 13  | SKU                                       | varchar  | SKU                      | SKU体系    |
 | 14  | SKU1                                      | varchar  | SKU1                     | SKU体系    |
 | 15  | 备用SKU1                                  | varchar  | 备用SKU1                 | SKU体系    |

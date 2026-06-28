@@ -347,3 +347,33 @@ PROPERTIES (
 | `Distribution column not found` | 分桶键不存在 | 检查分桶键拼写，确保在列定义中 |
 | `Unknown properties: {dynamic_partition.create_history_partition=true}` | 使用了不存在的动态分区参数 | 改为 `dynamic_partition.history_partition_num` |
 | `Unexpected input '自增主键'` | COMMENT 使用了单引号 `'` 或中文括号 `（）` | 改用双引号 `"` 包裹注释，使用英文括号 `()` |
+
+## 八、StarRocks 规范与最佳实践 总结
+
+### 1. 数据类型与转换规范
+- **BIGINT（整数型）**：是“8字节整数类型”，且**默认自带“有符号（能存负数）”属性**。在 ETL 中用于平替 MySQL 的 `CAST(... AS SIGNED)`，既能安全存储负数（如库存差异、补货修正），又符合 StarRocks 标准语法。
+- **DECIMAL（高精度数值）**：金额（如吊牌价、回款价）和比值（如折扣、达成率）统一使用 `DECIMAL(18,6)`，保留 6 位小数以确保财务与指标计算的精度。
+- **DATE / DATETIME（时间型）**：日期类字段使用 `DATE()` 函数截断时间部分；系统同步时间等需要精确到秒的字段使用 `DATETIME`。
+
+### 2. 主键与表模型规范（PRIMARY KEY 模型）
+- **主键位置**：在 `PRIMARY KEY` 模型中，作为业务主键的列（如 `sku`）**必须定义在表结构的前 N 列**。
+- **更新机制**：`PRIMARY KEY` 模型原生支持按主键进行 Upsert（更新/插入），非常适合日刷新的 DWD 维表或状态流水表。
+- **分桶策略**：使用 `DISTRIBUTED BY HASH(主键)`，确保同一个 SKU 的数据路由到同一个 Tablet，最大化主键更新和点查的性能。
+
+### 3. 表属性与存储优化规范（PROPERTIES）
+- **持久化索引**：`"enable_persistent_index" = "true"` 是 `PRIMARY KEY` 模型的专属核心优化，将主键索引持久化到磁盘，大幅降低内存占用并提升导入性能。
+- **压缩算法**：`"compression" = "LZ4"`，在压缩比和 CPU 解压性能之间取得最佳平衡，是 OLAP 场景的默认推荐。
+- **Schema 演进**：`"fast_schema_evolution" = "true"`，开启后支持轻量级的加减列操作，无需重写底层数据文件。
+
+### 4. 数据清洗与空值处理规范（ETL 逻辑）
+- **字符串空值兜底**：使用 `COALESCE(NULLIF(TRIM(col), ''), 'None')` 组合，同时处理 `NULL`、纯空格和空字符串，赋予统一的默认值（如 `'None'`）。
+- **数值空值兜底**：使用 `COALESCE(CAST(... AS BIGINT/DECIMAL), 0)`，确保数值计算时不会因为 `NULL` 导致整个表达式结果变为 `NULL`。
+- **日期空值兜底**：使用 `COALESCE(DATE(...), DATE('1970-01-01'))` 赋予极小默认日期，防止下游 BI 工具因 `NULL` 日期报错。
+- **主备字段容错**：在 `WHERE` 过滤和主键取值时，使用 `COALESCE(NULLIF(SKU), NULLIF(SKU1))` 实现“主字段为空则降级取备用字段”，避免使用 `AND` 导致误杀有效数据。
+
+### 5. SQL 编写与命名规范
+- **显式指定列名与别名**：`INSERT INTO` 必须显式写出目标列名；`SELECT` 子句中必须为每个字段显式指定 `AS alias`。这能防止源表或目标表字段顺序变更导致的数据错位（Data Shift）。
+- **特殊字符转义**：ODS 层源自飞书/Excel 的中文或带全角/半角括号的字段名（如 **`实际销售价（$）`**、**`订货数量(sku)`**），在 SQL 中**必须使用反引号（`` ` ``）严格包裹**，防止解析报错。
+- **DWD 命名规范**：DWD 层字段统一摒弃中文和特殊符号，采用英文 `snake_case`（下划线命名法），提升下游查询的兼容性和书写体验。
+
+ 

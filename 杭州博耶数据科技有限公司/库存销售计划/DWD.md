@@ -214,11 +214,11 @@ SELECT
     '361' AS brand,                                    -- 品牌标识（DWD新增）
     COALESCE(NULLIF(TRIM(SKU), ''), 'None'),           -- SKU编码
     COALESCE(DATE(NULLIF(TRIM(销售日期), '')), DATE('1970-01-01')),        -- 销售日期转DATE类型
-    -- 4个渠道销量（CAST为SIGNED整数）
-    COALESCE(CAST(NULLIF(TRIM(`361sport-销量`), '') AS SIGNED), 0) AS qty_361sport,
-    COALESCE(CAST(NULLIF(TRIM(`中国公司(361°客户)-销量`), '') AS SIGNED), 0) AS qty_china,
-    COALESCE(CAST(NULLIF(TRIM(`361°寄样-销量`), '') AS SIGNED), 0) AS qty_sample,
-    COALESCE(CAST(NULLIF(TRIM(`员工内购（香港）-销量`), '') AS SIGNED), 0) AS qty_staff_hk,
+    -- 4个渠道销量（CAST为BIGINT整数）
+    COALESCE(CAST(NULLIF(TRIM(`361sport-销量`), '') AS BIGINT), 0) AS qty_361sport,
+    COALESCE(CAST(NULLIF(TRIM(`中国公司(361°客户)-销量`), '') AS BIGINT), 0) AS qty_china,
+    COALESCE(CAST(NULLIF(TRIM(`361°寄样-销量`), '') AS BIGINT), 0) AS qty_sample,
+    COALESCE(CAST(NULLIF(TRIM(`员工内购（香港）-销量`), '') AS BIGINT), 0) AS qty_staff_hk,
     -- 4个渠道金额（CAST为DECIMAL(18,6)保留6位小数）
     COALESCE(CAST(NULLIF(TRIM(`361sport-金额`), '') AS DECIMAL(18,6)), 0.000000) AS amt_361sport,
     COALESCE(CAST(NULLIF(TRIM(`中国公司(361°客户)-金额`), '') AS DECIMAL(18,6)), 0.000000) AS amt_china,
@@ -237,11 +237,11 @@ SELECT
     '361' AS brand,                                    -- 品牌标识（DWD新增）
     COALESCE(NULLIF(TRIM(SKU), ''), 'None'),           -- SKU编码
     COALESCE(DATE(NULLIF(TRIM(销售日期), '')), DATE('1970-01-01')),        -- 销售日期转DATE类型
-    -- 4个渠道销量（CAST为SIGNED整数）
-    COALESCE(CAST(NULLIF(TRIM(`361sport-销量`), '') AS SIGNED), 0) AS qty_361sport,
-    COALESCE(CAST(NULLIF(TRIM(`中国公司(361°客户)-销量`), '') AS SIGNED), 0) AS qty_china,
-    COALESCE(CAST(NULLIF(TRIM(`361°寄样-销量`), '') AS SIGNED), 0) AS qty_sample,
-    COALESCE(CAST(NULLIF(TRIM(`员工内购（香港）-销量`), '') AS SIGNED), 0) AS qty_staff_hk,
+    -- 4个渠道销量（CAST为BIGINT整数）
+    COALESCE(CAST(NULLIF(TRIM(`361sport-销量`), '') AS BIGINT), 0) AS qty_361sport,
+    COALESCE(CAST(NULLIF(TRIM(`中国公司(361°客户)-销量`), '') AS BIGINT), 0) AS qty_china,
+    COALESCE(CAST(NULLIF(TRIM(`361°寄样-销量`), '') AS BIGINT), 0) AS qty_sample,
+    COALESCE(CAST(NULLIF(TRIM(`员工内购（香港）-销量`), '') AS BIGINT), 0) AS qty_staff_hk,
     -- 4个渠道金额（CAST为DECIMAL(18,6)保留6位小数）
     COALESCE(CAST(NULLIF(TRIM(`361sport-金额`), '') AS DECIMAL(18,6)), 0.000000) AS amt_361sport,
     COALESCE(CAST(NULLIF(TRIM(`中国公司(361°客户)-金额`), '') AS DECIMAL(18,6)), 0.000000) AS amt_china,
@@ -260,11 +260,11 @@ SELECT
     '361' AS brand,                                    -- 品牌标识（DWD新增）
     COALESCE(NULLIF(TRIM(SKU), ''), 'None'),           -- SKU编码
     COALESCE(DATE(NULLIF(TRIM(销售日期), '')), DATE('1970-01-01')),        -- 销售日期转DATE类型
-    -- 4个渠道销量（CAST为SIGNED整数）
-    COALESCE(CAST(NULLIF(TRIM(`361sport-销量`), '') AS SIGNED), 0) AS qty_361sport,
-    COALESCE(CAST(NULLIF(TRIM(`中国公司(361°客户)-销量`), '') AS SIGNED), 0) AS qty_china,
-    COALESCE(CAST(NULLIF(TRIM(`361°寄样-销量`), '') AS SIGNED), 0) AS qty_sample,
-    COALESCE(CAST(NULLIF(TRIM(`员工内购（香港）-销量`), '') AS SIGNED), 0) AS qty_staff_hk,
+    -- 4个渠道销量（CAST为BIGINT整数）
+    COALESCE(CAST(NULLIF(TRIM(`361sport-销量`), '') AS BIGINT), 0) AS qty_361sport,
+    COALESCE(CAST(NULLIF(TRIM(`中国公司(361°客户)-销量`), '') AS BIGINT), 0) AS qty_china,
+    COALESCE(CAST(NULLIF(TRIM(`361°寄样-销量`), '') AS BIGINT), 0) AS qty_sample,
+    COALESCE(CAST(NULLIF(TRIM(`员工内购（香港）-销量`), '') AS BIGINT), 0) AS qty_staff_hk,
     -- 4个渠道金额（CAST为DECIMAL(18,6)保留6位小数）
     COALESCE(CAST(NULLIF(TRIM(`361sport-金额`), '') AS DECIMAL(18,6)), 0.000000) AS amt_361sport,
     COALESCE(CAST(NULLIF(TRIM(`中国公司(361°客户)-金额`), '') AS DECIMAL(18,6)), 0.000000) AS amt_china,
@@ -293,10 +293,10 @@ SELECT
     '361' AS brand, 
     COALESCE(NULLIF(TRIM(SKU), ''), 'None') AS sku,
     COALESCE(DATE(NULLIF(TRIM(销售日期), '')), DATE('1970-01-01')) AS sales_date,
-    COALESCE(CAST(NULLIF(TRIM(`361sport-销量`), '') AS SIGNED), 0) AS qty_361sport,
-    COALESCE(CAST(NULLIF(TRIM(`中国公司(361°客户)-销量`), '') AS SIGNED), 0) AS qty_china,
-    COALESCE(CAST(NULLIF(TRIM(`361°寄样-销量`), '') AS SIGNED), 0) AS qty_sample,
-    COALESCE(CAST(NULLIF(TRIM(`员工内购（香港）-销量`), '') AS SIGNED), 0) AS qty_staff_hk,
+    COALESCE(CAST(NULLIF(TRIM(`361sport-销量`), '') AS BIGINT), 0) AS qty_361sport,
+    COALESCE(CAST(NULLIF(TRIM(`中国公司(361°客户)-销量`), '') AS BIGINT), 0) AS qty_china,
+    COALESCE(CAST(NULLIF(TRIM(`361°寄样-销量`), '') AS BIGINT), 0) AS qty_sample,
+    COALESCE(CAST(NULLIF(TRIM(`员工内购（香港）-销量`), '') AS BIGINT), 0) AS qty_staff_hk,
     COALESCE(CAST(NULLIF(TRIM(`361sport-金额`), '') AS DECIMAL(18,6)), 0) AS amt_361sport,
     COALESCE(CAST(NULLIF(TRIM(`中国公司(361°客户)-金额`), '') AS DECIMAL(18,6)), 0) AS amt_china,
     COALESCE(CAST(NULLIF(TRIM(`361°寄样-金额`), '') AS DECIMAL(18,6)), 0) AS amt_sample,
@@ -313,10 +313,10 @@ SELECT
     '361' AS brand, 
     COALESCE(NULLIF(TRIM(SKU), ''), 'None') AS sku,
     COALESCE(DATE(NULLIF(TRIM(销售日期), '')), DATE('1970-01-01')) AS sales_date,
-    COALESCE(CAST(NULLIF(TRIM(`361sport-销量`), '') AS SIGNED), 0) AS qty_361sport,
-    COALESCE(CAST(NULLIF(TRIM(`中国公司(361°客户)-销量`), '') AS SIGNED), 0) AS qty_china,
-    COALESCE(CAST(NULLIF(TRIM(`361°寄样-销量`), '') AS SIGNED), 0) AS qty_sample,
-    COALESCE(CAST(NULLIF(TRIM(`员工内购（香港）-销量`), '') AS SIGNED), 0) AS qty_staff_hk,
+    COALESCE(CAST(NULLIF(TRIM(`361sport-销量`), '') AS BIGINT), 0) AS qty_361sport,
+    COALESCE(CAST(NULLIF(TRIM(`中国公司(361°客户)-销量`), '') AS BIGINT), 0) AS qty_china,
+    COALESCE(CAST(NULLIF(TRIM(`361°寄样-销量`), '') AS BIGINT), 0) AS qty_sample,
+    COALESCE(CAST(NULLIF(TRIM(`员工内购（香港）-销量`), '') AS BIGINT), 0) AS qty_staff_hk,
     COALESCE(CAST(NULLIF(TRIM(`361sport-金额`), '') AS DECIMAL(18,6)), 0) AS amt_361sport,
     COALESCE(CAST(NULLIF(TRIM(`中国公司(361°客户)-金额`), '') AS DECIMAL(18,6)), 0) AS amt_china,
     COALESCE(CAST(NULLIF(TRIM(`361°寄样-金额`), '') AS DECIMAL(18,6)), 0) AS amt_sample,
@@ -334,10 +334,10 @@ SELECT
     '361' AS brand, 
     COALESCE(NULLIF(TRIM(SKU), ''), 'None') AS sku,
     COALESCE(DATE(NULLIF(TRIM(销售日期), '')), DATE('1970-01-01')) AS sales_date,
-    COALESCE(CAST(NULLIF(TRIM(`361sport-销量`), '') AS SIGNED), 0) AS qty_361sport,
-    COALESCE(CAST(NULLIF(TRIM(`中国公司(361°客户)-销量`), '') AS SIGNED), 0) AS qty_china,
-    COALESCE(CAST(NULLIF(TRIM(`361°寄样-销量`), '') AS SIGNED), 0) AS qty_sample,
-    COALESCE(CAST(NULLIF(TRIM(`员工内购（香港）-销量`), '') AS SIGNED), 0) AS qty_staff_hk,
+    COALESCE(CAST(NULLIF(TRIM(`361sport-销量`), '') AS BIGINT), 0) AS qty_361sport,
+    COALESCE(CAST(NULLIF(TRIM(`中国公司(361°客户)-销量`), '') AS BIGINT), 0) AS qty_china,
+    COALESCE(CAST(NULLIF(TRIM(`361°寄样-销量`), '') AS BIGINT), 0) AS qty_sample,
+    COALESCE(CAST(NULLIF(TRIM(`员工内购（香港）-销量`), '') AS BIGINT), 0) AS qty_staff_hk,
     COALESCE(CAST(NULLIF(TRIM(`361sport-金额`), '') AS DECIMAL(18,6)), 0) AS amt_361sport,
     COALESCE(CAST(NULLIF(TRIM(`中国公司(361°客户)-金额`), '') AS DECIMAL(18,6)), 0) AS amt_china,
     COALESCE(CAST(NULLIF(TRIM(`361°寄样-金额`), '') AS DECIMAL(18,6)), 0) AS amt_sample,
@@ -493,33 +493,33 @@ SELECT
     COALESCE(DATE(NULLIF(TRIM(首次销售日期), '')), DATE('1970-01-01'))                AS first_sales_date,
     COALESCE(NULLIF(TRIM(销售周期所属周), ''), 'None')                              AS sales_week,
     -- 销售指标
-    COALESCE(CAST(NULLIF(TRIM(`订货+补货1`), '') AS SIGNED), 0)                     AS order_replenish_1,
-    COALESCE(CAST(NULLIF(TRIM(`订货+补货`), '') AS SIGNED), 0)                      AS order_replenish,
-    COALESCE(CAST(NULLIF(TRIM(实际总销量), '') AS SIGNED), 0)                       AS actual_total_qty,
-    COALESCE(CAST(NULLIF(TRIM(预计销售周期天数), '') AS SIGNED), 0)                 AS est_cycle_days,
-    COALESCE(CAST(NULLIF(TRIM(预计周销量), '') AS SIGNED), 0)                       AS est_week_qty,
-    COALESCE(CAST(NULLIF(TRIM(预计销量), '') AS SIGNED), 0)                         AS est_qty,
-    COALESCE(CAST(NULLIF(TRIM(实际周销量), '') AS SIGNED), 0)                       AS actual_week_qty,
-    COALESCE(CAST(NULLIF(TRIM(实际销量), '') AS SIGNED), 0)                         AS actual_qty,
+    COALESCE(CAST(NULLIF(TRIM(`订货+补货1`), '') AS BIGINT), 0)                     AS order_replenish_1,
+    COALESCE(CAST(NULLIF(TRIM(`订货+补货`), '') AS BIGINT), 0)                      AS order_replenish,
+    COALESCE(CAST(NULLIF(TRIM(实际总销量), '') AS BIGINT), 0)                       AS actual_total_qty,
+    COALESCE(CAST(NULLIF(TRIM(预计销售周期天数), '') AS BIGINT), 0)                 AS est_cycle_days,
+    COALESCE(CAST(NULLIF(TRIM(预计周销量), '') AS BIGINT), 0)                       AS est_week_qty,
+    COALESCE(CAST(NULLIF(TRIM(预计销量), '') AS BIGINT), 0)                         AS est_qty,
+    COALESCE(CAST(NULLIF(TRIM(实际周销量), '') AS BIGINT), 0)                       AS actual_week_qty,
+    COALESCE(CAST(NULLIF(TRIM(实际销量), '') AS BIGINT), 0)                         AS actual_qty,
     -- 18个渠道销量
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道-销量`), '') AS SIGNED), 0)                  AS qty_wd,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道寄样-销量`), '') AS SIGNED), 0)              AS qty_wd_sample,
-    COALESCE(CAST(NULLIF(TRIM(`得物APP_韦德-销量`), '') AS SIGNED), 0)              AS qty_dewu,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道-得物寄售-销量`), '') AS SIGNED), 0)         AS qty_dewu_consign,
-    COALESCE(CAST(NULLIF(TRIM(`得物APP转寄_95分-销量`), '') AS SIGNED), 0)          AS qty_95fen,
-    COALESCE(CAST(NULLIF(TRIM(`广东炫动商贸有限公司(李宁客户)-销量`), '') AS SIGNED), 0) AS qty_guangdong,
-    COALESCE(CAST(NULLIF(TRIM(`全勇分销-销量`), '') AS SIGNED), 0)                  AS qty_quanyong,
-    COALESCE(CAST(NULLIF(TRIM(`应科迪_客户-销量`), '') AS SIGNED), 0)               AS qty_yingkedi,
-    COALESCE(CAST(NULLIF(TRIM(`韦德线下店铺-销量`), '') AS SIGNED), 0)              AS qty_offline,
-    COALESCE(CAST(NULLIF(TRIM(`韦德日本站-销量`), '') AS SIGNED), 0)                AS qty_japan,
-    COALESCE(CAST(NULLIF(TRIM(`韦德西语站-销量`), '') AS SIGNED), 0)                AS qty_spanish,
-    COALESCE(CAST(NULLIF(TRIM(`dw_韦德伟宏店-销量`), '') AS SIGNED), 0)             AS qty_weihong,
-    COALESCE(CAST(NULLIF(TRIM(`韦德_95分店-销量`), '') AS SIGNED), 0)               AS qty_95fen_shop,
-    COALESCE(CAST(NULLIF(TRIM(`拼多多_博耶运动户外专营店-销量`), '') AS SIGNED), 0) AS qty_pdd,
-    COALESCE(CAST(NULLIF(TRIM(`eBay-销量`), '') AS SIGNED), 0)                      AS qty_ebay,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道--招待费-销量`), '') AS SIGNED), 0)          AS qty_entertainment,
-    COALESCE(CAST(NULLIF(TRIM(`韦德德国站-销量`), '') AS SIGNED), 0)                AS qty_germany,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道B2B-销量`), '') AS SIGNED), 0)               AS qty_b2b,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道-销量`), '') AS BIGINT), 0)                  AS qty_wd,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道寄样-销量`), '') AS BIGINT), 0)              AS qty_wd_sample,
+    COALESCE(CAST(NULLIF(TRIM(`得物APP_韦德-销量`), '') AS BIGINT), 0)              AS qty_dewu,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道-得物寄售-销量`), '') AS BIGINT), 0)         AS qty_dewu_consign,
+    COALESCE(CAST(NULLIF(TRIM(`得物APP转寄_95分-销量`), '') AS BIGINT), 0)          AS qty_95fen,
+    COALESCE(CAST(NULLIF(TRIM(`广东炫动商贸有限公司(李宁客户)-销量`), '') AS BIGINT), 0) AS qty_guangdong,
+    COALESCE(CAST(NULLIF(TRIM(`全勇分销-销量`), '') AS BIGINT), 0)                  AS qty_quanyong,
+    COALESCE(CAST(NULLIF(TRIM(`应科迪_客户-销量`), '') AS BIGINT), 0)               AS qty_yingkedi,
+    COALESCE(CAST(NULLIF(TRIM(`韦德线下店铺-销量`), '') AS BIGINT), 0)              AS qty_offline,
+    COALESCE(CAST(NULLIF(TRIM(`韦德日本站-销量`), '') AS BIGINT), 0)                AS qty_japan,
+    COALESCE(CAST(NULLIF(TRIM(`韦德西语站-销量`), '') AS BIGINT), 0)                AS qty_spanish,
+    COALESCE(CAST(NULLIF(TRIM(`dw_韦德伟宏店-销量`), '') AS BIGINT), 0)             AS qty_weihong,
+    COALESCE(CAST(NULLIF(TRIM(`韦德_95分店-销量`), '') AS BIGINT), 0)               AS qty_95fen_shop,
+    COALESCE(CAST(NULLIF(TRIM(`拼多多_博耶运动户外专营店-销量`), '') AS BIGINT), 0) AS qty_pdd,
+    COALESCE(CAST(NULLIF(TRIM(`eBay-销量`), '') AS BIGINT), 0)                      AS qty_ebay,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道--招待费-销量`), '') AS BIGINT), 0)          AS qty_entertainment,
+    COALESCE(CAST(NULLIF(TRIM(`韦德德国站-销量`), '') AS BIGINT), 0)                AS qty_germany,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道B2B-销量`), '') AS BIGINT), 0)               AS qty_b2b,
     -- 18个渠道金额
     COALESCE(CAST(NULLIF(TRIM(`韦德之道-金额`), '') AS DECIMAL(18,6)), 0)           AS amt_wd,
     COALESCE(CAST(NULLIF(TRIM(`韦德之道寄样-金额`), '') AS DECIMAL(18,6)), 0)       AS amt_wd_sample,
@@ -585,27 +585,27 @@ SELECT
     0                                                                               AS est_qty,
     0                                                                               AS actual_week_qty,
     -- 23分表"实际销量"为varchar，需CAST
-    COALESCE(CAST(NULLIF(TRIM(实际销量), '') AS SIGNED), 0)                         AS actual_qty,
+    COALESCE(CAST(NULLIF(TRIM(实际销量), '') AS BIGINT), 0)                         AS actual_qty,
     
     -- 18个渠道销量（23分表有，与06一致）
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道-销量`), '') AS SIGNED), 0)                  AS qty_wd,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道寄样-销量`), '') AS SIGNED), 0)              AS qty_wd_sample,
-    COALESCE(CAST(NULLIF(TRIM(`得物APP_韦德-销量`), '') AS SIGNED), 0)              AS qty_dewu,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道-得物寄售-销量`), '') AS SIGNED), 0)         AS qty_dewu_consign,
-    COALESCE(CAST(NULLIF(TRIM(`得物APP转寄_95分-销量`), '') AS SIGNED), 0)          AS qty_95fen,
-    COALESCE(CAST(NULLIF(TRIM(`广东炫动商贸有限公司(李宁客户)-销量`), '') AS SIGNED), 0) AS qty_guangdong,
-    COALESCE(CAST(NULLIF(TRIM(`全勇分销-销量`), '') AS SIGNED), 0)                  AS qty_quanyong,
-    COALESCE(CAST(NULLIF(TRIM(`应科迪_客户-销量`), '') AS SIGNED), 0)               AS qty_yingkedi,
-    COALESCE(CAST(NULLIF(TRIM(`韦德线下店铺-销量`), '') AS SIGNED), 0)              AS qty_offline,
-    COALESCE(CAST(NULLIF(TRIM(`韦德日本站-销量`), '') AS SIGNED), 0)                AS qty_japan,
-    COALESCE(CAST(NULLIF(TRIM(`韦德西语站-销量`), '') AS SIGNED), 0)                AS qty_spanish,
-    COALESCE(CAST(NULLIF(TRIM(`dw_韦德伟宏店-销量`), '') AS SIGNED), 0)             AS qty_weihong,
-    COALESCE(CAST(NULLIF(TRIM(`韦德_95分店-销量`), '') AS SIGNED), 0)               AS qty_95fen_shop,
-    COALESCE(CAST(NULLIF(TRIM(`拼多多_博耶运动户外专营店-销量`), '') AS SIGNED), 0) AS qty_pdd,
-    COALESCE(CAST(NULLIF(TRIM(`eBay-销量`), '') AS SIGNED), 0)                      AS qty_ebay,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道--招待费-销量`), '') AS SIGNED), 0)          AS qty_entertainment,
-    COALESCE(CAST(NULLIF(TRIM(`韦德德国站-销量`), '') AS SIGNED), 0)                AS qty_germany,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道B2B-销量`), '') AS SIGNED), 0)               AS qty_b2b,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道-销量`), '') AS BIGINT), 0)                  AS qty_wd,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道寄样-销量`), '') AS BIGINT), 0)              AS qty_wd_sample,
+    COALESCE(CAST(NULLIF(TRIM(`得物APP_韦德-销量`), '') AS BIGINT), 0)              AS qty_dewu,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道-得物寄售-销量`), '') AS BIGINT), 0)         AS qty_dewu_consign,
+    COALESCE(CAST(NULLIF(TRIM(`得物APP转寄_95分-销量`), '') AS BIGINT), 0)          AS qty_95fen,
+    COALESCE(CAST(NULLIF(TRIM(`广东炫动商贸有限公司(李宁客户)-销量`), '') AS BIGINT), 0) AS qty_guangdong,
+    COALESCE(CAST(NULLIF(TRIM(`全勇分销-销量`), '') AS BIGINT), 0)                  AS qty_quanyong,
+    COALESCE(CAST(NULLIF(TRIM(`应科迪_客户-销量`), '') AS BIGINT), 0)               AS qty_yingkedi,
+    COALESCE(CAST(NULLIF(TRIM(`韦德线下店铺-销量`), '') AS BIGINT), 0)              AS qty_offline,
+    COALESCE(CAST(NULLIF(TRIM(`韦德日本站-销量`), '') AS BIGINT), 0)                AS qty_japan,
+    COALESCE(CAST(NULLIF(TRIM(`韦德西语站-销量`), '') AS BIGINT), 0)                AS qty_spanish,
+    COALESCE(CAST(NULLIF(TRIM(`dw_韦德伟宏店-销量`), '') AS BIGINT), 0)             AS qty_weihong,
+    COALESCE(CAST(NULLIF(TRIM(`韦德_95分店-销量`), '') AS BIGINT), 0)               AS qty_95fen_shop,
+    COALESCE(CAST(NULLIF(TRIM(`拼多多_博耶运动户外专营店-销量`), '') AS BIGINT), 0) AS qty_pdd,
+    COALESCE(CAST(NULLIF(TRIM(`eBay-销量`), '') AS BIGINT), 0)                      AS qty_ebay,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道--招待费-销量`), '') AS BIGINT), 0)          AS qty_entertainment,
+    COALESCE(CAST(NULLIF(TRIM(`韦德德国站-销量`), '') AS BIGINT), 0)                AS qty_germany,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道B2B-销量`), '') AS BIGINT), 0)               AS qty_b2b,
     
     -- 18个渠道金额
     COALESCE(CAST(NULLIF(TRIM(`韦德之道-金额`), '') AS DECIMAL(18,6)), 0)           AS amt_wd,
@@ -677,24 +677,24 @@ SELECT
     0                                                                               AS actual_week_qty,
     0                                                                               AS actual_qty,
     -- 18个渠道销量（30/50有，与06一致）
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道-销量`), '') AS SIGNED), 0)                  AS qty_wd,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道寄样-销量`), '') AS SIGNED), 0)              AS qty_wd_sample,
-    COALESCE(CAST(NULLIF(TRIM(`得物APP_韦德-销量`), '') AS SIGNED), 0)              AS qty_dewu,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道-得物寄售-销量`), '') AS SIGNED), 0)         AS qty_dewu_consign,
-    COALESCE(CAST(NULLIF(TRIM(`得物APP转寄_95分-销量`), '') AS SIGNED), 0)          AS qty_95fen,
-    COALESCE(CAST(NULLIF(TRIM(`广东炫动商贸有限公司(李宁客户)-销量`), '') AS SIGNED), 0) AS qty_guangdong,
-    COALESCE(CAST(NULLIF(TRIM(`全勇分销-销量`), '') AS SIGNED), 0)                  AS qty_quanyong,
-    COALESCE(CAST(NULLIF(TRIM(`应科迪_客户-销量`), '') AS SIGNED), 0)               AS qty_yingkedi,
-    COALESCE(CAST(NULLIF(TRIM(`韦德线下店铺-销量`), '') AS SIGNED), 0)              AS qty_offline,
-    COALESCE(CAST(NULLIF(TRIM(`韦德日本站-销量`), '') AS SIGNED), 0)                AS qty_japan,
-    COALESCE(CAST(NULLIF(TRIM(`韦德西语站-销量`), '') AS SIGNED), 0)                AS qty_spanish,
-    COALESCE(CAST(NULLIF(TRIM(`dw_韦德伟宏店-销量`), '') AS SIGNED), 0)             AS qty_weihong,
-    COALESCE(CAST(NULLIF(TRIM(`韦德_95分店-销量`), '') AS SIGNED), 0)               AS qty_95fen_shop,
-    COALESCE(CAST(NULLIF(TRIM(`拼多多_博耶运动户外专营店-销量`), '') AS SIGNED), 0) AS qty_pdd,
-    COALESCE(CAST(NULLIF(TRIM(`eBay-销量`), '') AS SIGNED), 0)                      AS qty_ebay,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道--招待费-销量`), '') AS SIGNED), 0)          AS qty_entertainment,
-    COALESCE(CAST(NULLIF(TRIM(`韦德德国站-销量`), '') AS SIGNED), 0)                AS qty_germany,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道B2B-销量`), '') AS SIGNED), 0)               AS qty_b2b,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道-销量`), '') AS BIGINT), 0)                  AS qty_wd,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道寄样-销量`), '') AS BIGINT), 0)              AS qty_wd_sample,
+    COALESCE(CAST(NULLIF(TRIM(`得物APP_韦德-销量`), '') AS BIGINT), 0)              AS qty_dewu,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道-得物寄售-销量`), '') AS BIGINT), 0)         AS qty_dewu_consign,
+    COALESCE(CAST(NULLIF(TRIM(`得物APP转寄_95分-销量`), '') AS BIGINT), 0)          AS qty_95fen,
+    COALESCE(CAST(NULLIF(TRIM(`广东炫动商贸有限公司(李宁客户)-销量`), '') AS BIGINT), 0) AS qty_guangdong,
+    COALESCE(CAST(NULLIF(TRIM(`全勇分销-销量`), '') AS BIGINT), 0)                  AS qty_quanyong,
+    COALESCE(CAST(NULLIF(TRIM(`应科迪_客户-销量`), '') AS BIGINT), 0)               AS qty_yingkedi,
+    COALESCE(CAST(NULLIF(TRIM(`韦德线下店铺-销量`), '') AS BIGINT), 0)              AS qty_offline,
+    COALESCE(CAST(NULLIF(TRIM(`韦德日本站-销量`), '') AS BIGINT), 0)                AS qty_japan,
+    COALESCE(CAST(NULLIF(TRIM(`韦德西语站-销量`), '') AS BIGINT), 0)                AS qty_spanish,
+    COALESCE(CAST(NULLIF(TRIM(`dw_韦德伟宏店-销量`), '') AS BIGINT), 0)             AS qty_weihong,
+    COALESCE(CAST(NULLIF(TRIM(`韦德_95分店-销量`), '') AS BIGINT), 0)               AS qty_95fen_shop,
+    COALESCE(CAST(NULLIF(TRIM(`拼多多_博耶运动户外专营店-销量`), '') AS BIGINT), 0) AS qty_pdd,
+    COALESCE(CAST(NULLIF(TRIM(`eBay-销量`), '') AS BIGINT), 0)                      AS qty_ebay,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道--招待费-销量`), '') AS BIGINT), 0)          AS qty_entertainment,
+    COALESCE(CAST(NULLIF(TRIM(`韦德德国站-销量`), '') AS BIGINT), 0)                AS qty_germany,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道B2B-销量`), '') AS BIGINT), 0)               AS qty_b2b,
     -- 18个渠道金额
     COALESCE(CAST(NULLIF(TRIM(`韦德之道-金额`), '') AS DECIMAL(18,6)), 0)           AS amt_wd,
     COALESCE(CAST(NULLIF(TRIM(`韦德之道寄样-金额`), '') AS DECIMAL(18,6)), 0)       AS amt_wd_sample,
@@ -764,34 +764,34 @@ SELECT
     COALESCE(NULLIF(TRIM(销售周期所属周), ''), 'None')                              AS sales_week,
     
     -- 8个销售指标
-    COALESCE(CAST(NULLIF(TRIM(`订货+补货1`), '') AS SIGNED), 0)                     AS order_replenish_1,
-    COALESCE(CAST(NULLIF(TRIM(`订货+补货`), '') AS SIGNED), 0)                      AS order_replenish,
-    COALESCE(CAST(NULLIF(TRIM(实际总销量), '') AS SIGNED), 0)                       AS actual_total_qty,
-    COALESCE(CAST(NULLIF(TRIM(预计销售周期天数), '') AS SIGNED), 0)                 AS est_cycle_days,
-    COALESCE(CAST(NULLIF(TRIM(预计周销量), '') AS SIGNED), 0)                       AS est_week_qty,
-    COALESCE(CAST(NULLIF(TRIM(预计销量), '') AS SIGNED), 0)                         AS est_qty,
-    COALESCE(CAST(NULLIF(TRIM(实际周销量), '') AS SIGNED), 0)                       AS actual_week_qty,
-    COALESCE(CAST(NULLIF(TRIM(实际销量), '') AS SIGNED), 0)                         AS actual_qty,
+    COALESCE(CAST(NULLIF(TRIM(`订货+补货1`), '') AS BIGINT), 0)                     AS order_replenish_1,
+    COALESCE(CAST(NULLIF(TRIM(`订货+补货`), '') AS BIGINT), 0)                      AS order_replenish,
+    COALESCE(CAST(NULLIF(TRIM(实际总销量), '') AS BIGINT), 0)                       AS actual_total_qty,
+    COALESCE(CAST(NULLIF(TRIM(预计销售周期天数), '') AS BIGINT), 0)                 AS est_cycle_days,
+    COALESCE(CAST(NULLIF(TRIM(预计周销量), '') AS BIGINT), 0)                       AS est_week_qty,
+    COALESCE(CAST(NULLIF(TRIM(预计销量), '') AS BIGINT), 0)                         AS est_qty,
+    COALESCE(CAST(NULLIF(TRIM(实际周销量), '') AS BIGINT), 0)                       AS actual_week_qty,
+    COALESCE(CAST(NULLIF(TRIM(实际销量), '') AS BIGINT), 0)                         AS actual_qty,
     
     -- 18个渠道销量
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道-销量`), '') AS SIGNED), 0)                  AS qty_wd,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道寄样-销量`), '') AS SIGNED), 0)              AS qty_wd_sample,
-    COALESCE(CAST(NULLIF(TRIM(`得物APP_韦德-销量`), '') AS SIGNED), 0)              AS qty_dewu,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道-得物寄售-销量`), '') AS SIGNED), 0)         AS qty_dewu_consign,
-    COALESCE(CAST(NULLIF(TRIM(`得物APP转寄_95分-销量`), '') AS SIGNED), 0)          AS qty_95fen,
-    COALESCE(CAST(NULLIF(TRIM(`广东炫动商贸有限公司(李宁客户)-销量`), '') AS SIGNED), 0) AS qty_guangdong,
-    COALESCE(CAST(NULLIF(TRIM(`全勇分销-销量`), '') AS SIGNED), 0)                  AS qty_quanyong,
-    COALESCE(CAST(NULLIF(TRIM(`应科迪_客户-销量`), '') AS SIGNED), 0)               AS qty_yingkedi,
-    COALESCE(CAST(NULLIF(TRIM(`韦德线下店铺-销量`), '') AS SIGNED), 0)              AS qty_offline,
-    COALESCE(CAST(NULLIF(TRIM(`韦德日本站-销量`), '') AS SIGNED), 0)                AS qty_japan,
-    COALESCE(CAST(NULLIF(TRIM(`韦德西语站-销量`), '') AS SIGNED), 0)                AS qty_spanish,
-    COALESCE(CAST(NULLIF(TRIM(`dw_韦德伟宏店-销量`), '') AS SIGNED), 0)             AS qty_weihong,
-    COALESCE(CAST(NULLIF(TRIM(`韦德_95分店-销量`), '') AS SIGNED), 0)               AS qty_95fen_shop,
-    COALESCE(CAST(NULLIF(TRIM(`拼多多_博耶运动户外专营店-销量`), '') AS SIGNED), 0) AS qty_pdd,
-    COALESCE(CAST(NULLIF(TRIM(`eBay-销量`), '') AS SIGNED), 0)                      AS qty_ebay,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道--招待费-销量`), '') AS SIGNED), 0)          AS qty_entertainment,
-    COALESCE(CAST(NULLIF(TRIM(`韦德德国站-销量`), '') AS SIGNED), 0)                AS qty_germany,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道B2B-销量`), '') AS SIGNED), 0)               AS qty_b2b,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道-销量`), '') AS BIGINT), 0)                  AS qty_wd,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道寄样-销量`), '') AS BIGINT), 0)              AS qty_wd_sample,
+    COALESCE(CAST(NULLIF(TRIM(`得物APP_韦德-销量`), '') AS BIGINT), 0)              AS qty_dewu,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道-得物寄售-销量`), '') AS BIGINT), 0)         AS qty_dewu_consign,
+    COALESCE(CAST(NULLIF(TRIM(`得物APP转寄_95分-销量`), '') AS BIGINT), 0)          AS qty_95fen,
+    COALESCE(CAST(NULLIF(TRIM(`广东炫动商贸有限公司(李宁客户)-销量`), '') AS BIGINT), 0) AS qty_guangdong,
+    COALESCE(CAST(NULLIF(TRIM(`全勇分销-销量`), '') AS BIGINT), 0)                  AS qty_quanyong,
+    COALESCE(CAST(NULLIF(TRIM(`应科迪_客户-销量`), '') AS BIGINT), 0)               AS qty_yingkedi,
+    COALESCE(CAST(NULLIF(TRIM(`韦德线下店铺-销量`), '') AS BIGINT), 0)              AS qty_offline,
+    COALESCE(CAST(NULLIF(TRIM(`韦德日本站-销量`), '') AS BIGINT), 0)                AS qty_japan,
+    COALESCE(CAST(NULLIF(TRIM(`韦德西语站-销量`), '') AS BIGINT), 0)                AS qty_spanish,
+    COALESCE(CAST(NULLIF(TRIM(`dw_韦德伟宏店-销量`), '') AS BIGINT), 0)             AS qty_weihong,
+    COALESCE(CAST(NULLIF(TRIM(`韦德_95分店-销量`), '') AS BIGINT), 0)               AS qty_95fen_shop,
+    COALESCE(CAST(NULLIF(TRIM(`拼多多_博耶运动户外专营店-销量`), '') AS BIGINT), 0) AS qty_pdd,
+    COALESCE(CAST(NULLIF(TRIM(`eBay-销量`), '') AS BIGINT), 0)                      AS qty_ebay,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道--招待费-销量`), '') AS BIGINT), 0)          AS qty_entertainment,
+    COALESCE(CAST(NULLIF(TRIM(`韦德德国站-销量`), '') AS BIGINT), 0)                AS qty_germany,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道B2B-销量`), '') AS BIGINT), 0)               AS qty_b2b,
     
     -- 18个渠道金额
     COALESCE(CAST(NULLIF(TRIM(`韦德之道-金额`), '') AS DECIMAL(18,6)), 0)           AS amt_wd,
@@ -847,27 +847,27 @@ SELECT
     0                                                                               AS est_week_qty,
     0                                                                               AS est_qty,
     0                                                                               AS actual_week_qty,
-    COALESCE(CAST(NULLIF(TRIM(实际销量), '') AS SIGNED), 0)                         AS actual_qty,
+    COALESCE(CAST(NULLIF(TRIM(实际销量), '') AS BIGINT), 0)                         AS actual_qty,
     
     -- 18个渠道销量
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道-销量`), '') AS SIGNED), 0)                  AS qty_wd,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道寄样-销量`), '') AS SIGNED), 0)              AS qty_wd_sample,
-    COALESCE(CAST(NULLIF(TRIM(`得物APP_韦德-销量`), '') AS SIGNED), 0)              AS qty_dewu,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道-得物寄售-销量`), '') AS SIGNED), 0)         AS qty_dewu_consign,
-    COALESCE(CAST(NULLIF(TRIM(`得物APP转寄_95分-销量`), '') AS SIGNED), 0)          AS qty_95fen,
-    COALESCE(CAST(NULLIF(TRIM(`广东炫动商贸有限公司(李宁客户)-销量`), '') AS SIGNED), 0) AS qty_guangdong,
-    COALESCE(CAST(NULLIF(TRIM(`全勇分销-销量`), '') AS SIGNED), 0)                  AS qty_quanyong,
-    COALESCE(CAST(NULLIF(TRIM(`应科迪_客户-销量`), '') AS SIGNED), 0)               AS qty_yingkedi,
-    COALESCE(CAST(NULLIF(TRIM(`韦德线下店铺-销量`), '') AS SIGNED), 0)              AS qty_offline,
-    COALESCE(CAST(NULLIF(TRIM(`韦德日本站-销量`), '') AS SIGNED), 0)                AS qty_japan,
-    COALESCE(CAST(NULLIF(TRIM(`韦德西语站-销量`), '') AS SIGNED), 0)                AS qty_spanish,
-    COALESCE(CAST(NULLIF(TRIM(`dw_韦德伟宏店-销量`), '') AS SIGNED), 0)             AS qty_weihong,
-    COALESCE(CAST(NULLIF(TRIM(`韦德_95分店-销量`), '') AS SIGNED), 0)               AS qty_95fen_shop,
-    COALESCE(CAST(NULLIF(TRIM(`拼多多_博耶运动户外专营店-销量`), '') AS SIGNED), 0) AS qty_pdd,
-    COALESCE(CAST(NULLIF(TRIM(`eBay-销量`), '') AS SIGNED), 0)                      AS qty_ebay,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道--招待费-销量`), '') AS SIGNED), 0)          AS qty_entertainment,
-    COALESCE(CAST(NULLIF(TRIM(`韦德德国站-销量`), '') AS SIGNED), 0)                AS qty_germany,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道B2B-销量`), '') AS SIGNED), 0)               AS qty_b2b,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道-销量`), '') AS BIGINT), 0)                  AS qty_wd,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道寄样-销量`), '') AS BIGINT), 0)              AS qty_wd_sample,
+    COALESCE(CAST(NULLIF(TRIM(`得物APP_韦德-销量`), '') AS BIGINT), 0)              AS qty_dewu,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道-得物寄售-销量`), '') AS BIGINT), 0)         AS qty_dewu_consign,
+    COALESCE(CAST(NULLIF(TRIM(`得物APP转寄_95分-销量`), '') AS BIGINT), 0)          AS qty_95fen,
+    COALESCE(CAST(NULLIF(TRIM(`广东炫动商贸有限公司(李宁客户)-销量`), '') AS BIGINT), 0) AS qty_guangdong,
+    COALESCE(CAST(NULLIF(TRIM(`全勇分销-销量`), '') AS BIGINT), 0)                  AS qty_quanyong,
+    COALESCE(CAST(NULLIF(TRIM(`应科迪_客户-销量`), '') AS BIGINT), 0)               AS qty_yingkedi,
+    COALESCE(CAST(NULLIF(TRIM(`韦德线下店铺-销量`), '') AS BIGINT), 0)              AS qty_offline,
+    COALESCE(CAST(NULLIF(TRIM(`韦德日本站-销量`), '') AS BIGINT), 0)                AS qty_japan,
+    COALESCE(CAST(NULLIF(TRIM(`韦德西语站-销量`), '') AS BIGINT), 0)                AS qty_spanish,
+    COALESCE(CAST(NULLIF(TRIM(`dw_韦德伟宏店-销量`), '') AS BIGINT), 0)             AS qty_weihong,
+    COALESCE(CAST(NULLIF(TRIM(`韦德_95分店-销量`), '') AS BIGINT), 0)               AS qty_95fen_shop,
+    COALESCE(CAST(NULLIF(TRIM(`拼多多_博耶运动户外专营店-销量`), '') AS BIGINT), 0) AS qty_pdd,
+    COALESCE(CAST(NULLIF(TRIM(`eBay-销量`), '') AS BIGINT), 0)                      AS qty_ebay,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道--招待费-销量`), '') AS BIGINT), 0)          AS qty_entertainment,
+    COALESCE(CAST(NULLIF(TRIM(`韦德德国站-销量`), '') AS BIGINT), 0)                AS qty_germany,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道B2B-销量`), '') AS BIGINT), 0)               AS qty_b2b,
     
     -- 18个渠道金额
     COALESCE(CAST(NULLIF(TRIM(`韦德之道-金额`), '') AS DECIMAL(18,6)), 0)           AS amt_wd,
@@ -926,24 +926,24 @@ SELECT
     0                                                                               AS actual_qty,
     
     -- 18个渠道销量
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道-销量`), '') AS SIGNED), 0)                  AS qty_wd,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道寄样-销量`), '') AS SIGNED), 0)              AS qty_wd_sample,
-    COALESCE(CAST(NULLIF(TRIM(`得物APP_韦德-销量`), '') AS SIGNED), 0)              AS qty_dewu,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道-得物寄售-销量`), '') AS SIGNED), 0)         AS qty_dewu_consign,
-    COALESCE(CAST(NULLIF(TRIM(`得物APP转寄_95分-销量`), '') AS SIGNED), 0)          AS qty_95fen,
-    COALESCE(CAST(NULLIF(TRIM(`广东炫动商贸有限公司(李宁客户)-销量`), '') AS SIGNED), 0) AS qty_guangdong,
-    COALESCE(CAST(NULLIF(TRIM(`全勇分销-销量`), '') AS SIGNED), 0)                  AS qty_quanyong,
-    COALESCE(CAST(NULLIF(TRIM(`应科迪_客户-销量`), '') AS SIGNED), 0)               AS qty_yingkedi,
-    COALESCE(CAST(NULLIF(TRIM(`韦德线下店铺-销量`), '') AS SIGNED), 0)              AS qty_offline,
-    COALESCE(CAST(NULLIF(TRIM(`韦德日本站-销量`), '') AS SIGNED), 0)                AS qty_japan,
-    COALESCE(CAST(NULLIF(TRIM(`韦德西语站-销量`), '') AS SIGNED), 0)                AS qty_spanish,
-    COALESCE(CAST(NULLIF(TRIM(`dw_韦德伟宏店-销量`), '') AS SIGNED), 0)             AS qty_weihong,
-    COALESCE(CAST(NULLIF(TRIM(`韦德_95分店-销量`), '') AS SIGNED), 0)               AS qty_95fen_shop,
-    COALESCE(CAST(NULLIF(TRIM(`拼多多_博耶运动户外专营店-销量`), '') AS SIGNED), 0) AS qty_pdd,
-    COALESCE(CAST(NULLIF(TRIM(`eBay-销量`), '') AS SIGNED), 0)                      AS qty_ebay,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道--招待费-销量`), '') AS SIGNED), 0)          AS qty_entertainment,
-    COALESCE(CAST(NULLIF(TRIM(`韦德德国站-销量`), '') AS SIGNED), 0)                AS qty_germany,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道B2B-销量`), '') AS SIGNED), 0)               AS qty_b2b,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道-销量`), '') AS BIGINT), 0)                  AS qty_wd,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道寄样-销量`), '') AS BIGINT), 0)              AS qty_wd_sample,
+    COALESCE(CAST(NULLIF(TRIM(`得物APP_韦德-销量`), '') AS BIGINT), 0)              AS qty_dewu,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道-得物寄售-销量`), '') AS BIGINT), 0)         AS qty_dewu_consign,
+    COALESCE(CAST(NULLIF(TRIM(`得物APP转寄_95分-销量`), '') AS BIGINT), 0)          AS qty_95fen,
+    COALESCE(CAST(NULLIF(TRIM(`广东炫动商贸有限公司(李宁客户)-销量`), '') AS BIGINT), 0) AS qty_guangdong,
+    COALESCE(CAST(NULLIF(TRIM(`全勇分销-销量`), '') AS BIGINT), 0)                  AS qty_quanyong,
+    COALESCE(CAST(NULLIF(TRIM(`应科迪_客户-销量`), '') AS BIGINT), 0)               AS qty_yingkedi,
+    COALESCE(CAST(NULLIF(TRIM(`韦德线下店铺-销量`), '') AS BIGINT), 0)              AS qty_offline,
+    COALESCE(CAST(NULLIF(TRIM(`韦德日本站-销量`), '') AS BIGINT), 0)                AS qty_japan,
+    COALESCE(CAST(NULLIF(TRIM(`韦德西语站-销量`), '') AS BIGINT), 0)                AS qty_spanish,
+    COALESCE(CAST(NULLIF(TRIM(`dw_韦德伟宏店-销量`), '') AS BIGINT), 0)             AS qty_weihong,
+    COALESCE(CAST(NULLIF(TRIM(`韦德_95分店-销量`), '') AS BIGINT), 0)               AS qty_95fen_shop,
+    COALESCE(CAST(NULLIF(TRIM(`拼多多_博耶运动户外专营店-销量`), '') AS BIGINT), 0) AS qty_pdd,
+    COALESCE(CAST(NULLIF(TRIM(`eBay-销量`), '') AS BIGINT), 0)                      AS qty_ebay,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道--招待费-销量`), '') AS BIGINT), 0)          AS qty_entertainment,
+    COALESCE(CAST(NULLIF(TRIM(`韦德德国站-销量`), '') AS BIGINT), 0)                AS qty_germany,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道B2B-销量`), '') AS BIGINT), 0)               AS qty_b2b,
     
     -- 18个渠道金额
     COALESCE(CAST(NULLIF(TRIM(`韦德之道-金额`), '') AS DECIMAL(18,6)), 0)           AS amt_wd,
@@ -1002,24 +1002,24 @@ SELECT
     0                                                                               AS actual_qty,
     
     -- 18个渠道销量
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道-销量`), '') AS SIGNED), 0)                  AS qty_wd,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道寄样-销量`), '') AS SIGNED), 0)              AS qty_wd_sample,
-    COALESCE(CAST(NULLIF(TRIM(`得物APP_韦德-销量`), '') AS SIGNED), 0)              AS qty_dewu,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道-得物寄售-销量`), '') AS SIGNED), 0)         AS qty_dewu_consign,
-    COALESCE(CAST(NULLIF(TRIM(`得物APP转寄_95分-销量`), '') AS SIGNED), 0)          AS qty_95fen,
-    COALESCE(CAST(NULLIF(TRIM(`广东炫动商贸有限公司(李宁客户)-销量`), '') AS SIGNED), 0) AS qty_guangdong,
-    COALESCE(CAST(NULLIF(TRIM(`全勇分销-销量`), '') AS SIGNED), 0)                  AS qty_quanyong,
-    COALESCE(CAST(NULLIF(TRIM(`应科迪_客户-销量`), '') AS SIGNED), 0)               AS qty_yingkedi,
-    COALESCE(CAST(NULLIF(TRIM(`韦德线下店铺-销量`), '') AS SIGNED), 0)              AS qty_offline,
-    COALESCE(CAST(NULLIF(TRIM(`韦德日本站-销量`), '') AS SIGNED), 0)                AS qty_japan,
-    COALESCE(CAST(NULLIF(TRIM(`韦德西语站-销量`), '') AS SIGNED), 0)                AS qty_spanish,
-    COALESCE(CAST(NULLIF(TRIM(`dw_韦德伟宏店-销量`), '') AS SIGNED), 0)             AS qty_weihong,
-    COALESCE(CAST(NULLIF(TRIM(`韦德_95分店-销量`), '') AS SIGNED), 0)               AS qty_95fen_shop,
-    COALESCE(CAST(NULLIF(TRIM(`拼多多_博耶运动户外专营店-销量`), '') AS SIGNED), 0) AS qty_pdd,
-    COALESCE(CAST(NULLIF(TRIM(`eBay-销量`), '') AS SIGNED), 0)                      AS qty_ebay,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道--招待费-销量`), '') AS SIGNED), 0)          AS qty_entertainment,
-    COALESCE(CAST(NULLIF(TRIM(`韦德德国站-销量`), '') AS SIGNED), 0)                AS qty_germany,
-    COALESCE(CAST(NULLIF(TRIM(`韦德之道B2B-销量`), '') AS SIGNED), 0)               AS qty_b2b,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道-销量`), '') AS BIGINT), 0)                  AS qty_wd,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道寄样-销量`), '') AS BIGINT), 0)              AS qty_wd_sample,
+    COALESCE(CAST(NULLIF(TRIM(`得物APP_韦德-销量`), '') AS BIGINT), 0)              AS qty_dewu,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道-得物寄售-销量`), '') AS BIGINT), 0)         AS qty_dewu_consign,
+    COALESCE(CAST(NULLIF(TRIM(`得物APP转寄_95分-销量`), '') AS BIGINT), 0)          AS qty_95fen,
+    COALESCE(CAST(NULLIF(TRIM(`广东炫动商贸有限公司(李宁客户)-销量`), '') AS BIGINT), 0) AS qty_guangdong,
+    COALESCE(CAST(NULLIF(TRIM(`全勇分销-销量`), '') AS BIGINT), 0)                  AS qty_quanyong,
+    COALESCE(CAST(NULLIF(TRIM(`应科迪_客户-销量`), '') AS BIGINT), 0)               AS qty_yingkedi,
+    COALESCE(CAST(NULLIF(TRIM(`韦德线下店铺-销量`), '') AS BIGINT), 0)              AS qty_offline,
+    COALESCE(CAST(NULLIF(TRIM(`韦德日本站-销量`), '') AS BIGINT), 0)                AS qty_japan,
+    COALESCE(CAST(NULLIF(TRIM(`韦德西语站-销量`), '') AS BIGINT), 0)                AS qty_spanish,
+    COALESCE(CAST(NULLIF(TRIM(`dw_韦德伟宏店-销量`), '') AS BIGINT), 0)             AS qty_weihong,
+    COALESCE(CAST(NULLIF(TRIM(`韦德_95分店-销量`), '') AS BIGINT), 0)               AS qty_95fen_shop,
+    COALESCE(CAST(NULLIF(TRIM(`拼多多_博耶运动户外专营店-销量`), '') AS BIGINT), 0) AS qty_pdd,
+    COALESCE(CAST(NULLIF(TRIM(`eBay-销量`), '') AS BIGINT), 0)                      AS qty_ebay,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道--招待费-销量`), '') AS BIGINT), 0)          AS qty_entertainment,
+    COALESCE(CAST(NULLIF(TRIM(`韦德德国站-销量`), '') AS BIGINT), 0)                AS qty_germany,
+    COALESCE(CAST(NULLIF(TRIM(`韦德之道B2B-销量`), '') AS BIGINT), 0)               AS qty_b2b,
     
     -- 18个渠道金额
     COALESCE(CAST(NULLIF(TRIM(`韦德之道-金额`), '') AS DECIMAL(18,6)), 0)           AS amt_wd,
@@ -1260,7 +1260,7 @@ FROM feishu_dwd.dwd_feishu_sales_wd_d WHERE qty_b2b <> 0 OR amt_b2b <> 0;
 -- ============================================================
 -- DWD-4: feishu_dwd.dwd_feishu_product_wd_d  韦德商品库清洗表（日刷新）
 -- 来源：wd_shop（103字段）
--- 粒度：SKU（主键）
+-- 粒度：SKU(主键)，无需聚合(id=record_id=SKU一对一)
 -- 说明：从103字段中提取核心商品属性，剔除重复/预留字段（如实际售卖天数1~22、备用款号等）
 -- 引擎：StarRocks OLAP，PRIMARY KEY 模型（SKU为业务主键，支持按主键更新）
 --
@@ -1281,143 +1281,249 @@ FROM feishu_dwd.dwd_feishu_sales_wd_d WHERE qty_b2b <> 0 OR amt_b2b <> 0;
 -- 5. 聚合说明：不需要聚合。ODS表 wd_shop 中 SKU 唯一（每个SKU对应一条商品记录），
 --    id维度 = record_id维度 = SKU维度（一对一），直接按SKU插入即可。
 --    验证：SELECT COUNT(DISTINCT SKU) FROM wd_shop = SELECT COUNT(*) FROM wd_shop
+
+-- 额外补充字段:
+-- 1. 销售与评级指标（核心补充）
+-- rating (评级)：您特别指出的字段。用于商品 ABC 分类或 S/A/B/C 评级，对后续商品生命周期管理和资源倾斜至关重要。
+-- official_daily_sales (官网当日销售)：细分渠道的日销指标，用于监控官网渠道的实时爆发力。
+-- cum_sales_excl_current_week (销售累积数量-不含本周)：用于计算历史稳定销量，剔除本周波动干扰，是计算“安全库存”和“补货量”的核心基数。
+-- 2. 补货与预警体系（完善供应链闭环）
+-- warning_status (预警)：原 ODS 中的“预警”，通常为“高/中/低”或红黄蓝标签，用于看板直接展示。
+-- variance (差异)：补货模型中的核心计算字段（如：实际库存 - 目标库存），用于分析库存缺口。
+-- replenish_num (补货数量)：与原有的 replenish_qty (补货量) 区分。通常业务中一个是“系统建议补货量”，另一个是“人工修正后的最终补货数量”。
+-- replenish_correction (补货修正)：记录人工或系统二次干预的修正差值。
+-- has_replenish_mark (是否有补货标记)：过程状态字段，标识该 SKU 是否被业务人员打上了“需要补货”的标签（区别于最终结论 is_replenish）。
+-- 3. 时间维度与节点追踪（精细化运营）
+-- first_available_pickup_date (首次可提日期)：与“首次提货日期”区分，代表供应链端“允许提货”的时间，用于计算供应链响应时效。
+-- actual_sales_min_date (实际售卖最小日期)：动销起点，用于精准计算商品的实际生命周期和库龄。
+-- est_arrival_month (预计到货月份)：便于直接进行月度维度的到货计划和资金盘点，无需在 BI 层再做日期截断。
+-- planned_sales_time (计划销售时间) & est_shelf_time (预计上架时间)：VARCHAR 类型，保留业务填写的计划文本或模糊时间（如“2023年Q3”、“10月下旬”）。
+-- 4. 商品主数据与状态标识
+-- image_url (图片)：商品主图 URL。在 BI 看板（如 Tableau/FineBI）或数据产品中展示商品明细时，有图片能大幅提升业务人员的核对效率。
+-- system_item_no (系统货号)：提取了“系统货号1”作为主系统货号（剔除2/3/4），用于和 ERP/WMS 系统进行底层数据对账。
+-- min_granularity (最小颗粒度)：商品归类字段，用于标识该 SKU 是否是拆包售卖的最小单位。
+-- order_unique_value (订货唯一值)：订货单或批次的唯一标识，方便追溯该 SKU 属于哪一批次的订货计划。
+-- is_confirmed (是否确认过)：状态字段，标识该商品计划是否已经过业务主管审批确认，用于过滤“草稿”数据。
 -- ============================================================
 DROP TABLE IF EXISTS feishu_dwd.dwd_feishu_product_wd_d;
 CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_product_wd_d (
     -- 1. Key 列（PRIMARY KEY 模型，SKU 为业务主键，须为前 N 列）
-    `sku`                 VARCHAR(64)     COMMENT 'SKU编码（主键）',
-    -- 2. 维度列
-    `style_no`            VARCHAR(64)     COMMENT '款号',
-    `ip`                  VARCHAR(50)     COMMENT 'IP',
-    `series`              VARCHAR(50)     COMMENT '系列',
-    `color_name`          VARCHAR(50)     COMMENT '配色名',
-    `product_name`        VARCHAR(200)    COMMENT '商品名称',
-    `size`                VARCHAR(20)     COMMENT '尺码（码）',
-    `product_category`    VARCHAR(50)     COMMENT '商品分类',
-    -- 3. 度量列：价格信息（金额保留6位小数）
-    `tag_price`           DECIMAL(18,6)   COMMENT '吊牌价',
-    `discount`            DECIMAL(18,6)   COMMENT '折扣（比值保留6位小数）',
-    `payment_price`       DECIMAL(18,6)   COMMENT '回款价（varchar转decimal，金额）',
-    `actual_sales_price`  DECIMAL(18,6)   COMMENT '实际销售价（$，varchar转decimal，金额）',
-    -- 4. 度量列：订货信息（数量为整数）
-    `order_qty_sku`       BIGINT          COMMENT '订货数量(SKU)',
-    `order_qty_skc`       BIGINT          COMMENT '订货数量(SKC)',
-    -- 5. 维度列：时间信息
-    `order_date`          DATE            COMMENT '订货日期',
-    `est_arrival_date`    DATE            COMMENT '预计到货日期',
-    `first_pickup_date`   DATE            COMMENT '首次提货日期',
-    `shelf_date`          DATE            COMMENT '上架日期',
-    `first_sales_date`    DATE            COMMENT '首次销售日期',
-    `first_order_quarter` VARCHAR(20)     COMMENT '首次订货季度',
-    `year`                VARCHAR(10)     COMMENT '年份',
-    `sales_cycle_label`   VARCHAR(50)     COMMENT '销售周期标签',
-    -- 6. 度量列：库存信息（数量为整数）
-    `inventory_sku`       BIGINT          COMMENT '库存数量(SKU)',
-    `inventory_skc`       BIGINT          COMMENT '库存数量(SKC)',
-    `inventory_total`     BIGINT          COMMENT '库存合计',
-    `inventory_hz`        BIGINT          COMMENT '杭州库存',
-    `inventory_baoshui`   BIGINT          COMMENT '保税库存',
-    `inventory_feibao`    BIGINT          COMMENT '非保库存',
-    -- 7. 度量列：销售指标（数量/天数为整数，比值为6位小数）
-    `sales_cycle_days`    BIGINT          COMMENT '销售周期天数',
-    `daily_target`        BIGINT          COMMENT '销售目标(日)',
-    `weekly_target`       BIGINT          COMMENT '销售目标(周)',
-    `monthly_target`      BIGINT          COMMENT '销售目标(月)',
-    `quarterly_target`    BIGINT          COMMENT '销售目标(季)',
-    `cum_sales_sku`       BIGINT          COMMENT '销售累计数量(SKU)',
-    `cum_sales_skc`       BIGINT          COMMENT '销售累计数量(SKC)',
-    `skc_achievement`     DECIMAL(18,6)   COMMENT 'SKC达成率（比值保留6位小数）',
-    `actual_sales_days`   BIGINT          COMMENT '实际售卖天数',
-    `actual_daily_avg`    BIGINT          COMMENT '实际日均销量',
-    -- 8. 度量列：补货预警（数量/天数为整数）
-    `replenish_qty`       BIGINT          COMMENT '补货量',
-    `turnover_days`       BIGINT          COMMENT '周转天数',
-    `safety_days`         BIGINT          COMMENT '安全天数',
-    `is_replenish`        VARCHAR(10)     COMMENT '是否补货',
+    `sku`                         VARCHAR(128)    COMMENT "SKU编码(主键)",
+    -- 2. 维度列：商品主数据与归类
+    `style_no`                    VARCHAR(128)    COMMENT "款号",
+    `ip`                          VARCHAR(100)    COMMENT "IP",
+    `series`                      VARCHAR(100)    COMMENT "系列",
+    `color_name`                  VARCHAR(100)    COMMENT "配色名",
+    `product_name`                VARCHAR(500)    COMMENT "商品名称",
+    `size`                        VARCHAR(50)     COMMENT "尺码(码)",
+    `product_category`            VARCHAR(100)    COMMENT "商品分类",
+    `image_url`                   VARCHAR(1000)   COMMENT "商品图片URL",
+    `system_item_no`              VARCHAR(500)    COMMENT "系统货号(主)",
+    `min_granularity`             VARCHAR(100)    COMMENT "最小颗粒度",
+    `order_unique_value`          VARCHAR(500)    COMMENT "订货唯一值",
+    -- 3. 度量列：价格信息
+    `tag_price`                   DECIMAL(18,6)   COMMENT "吊牌价",
+    `discount`                    DECIMAL(18,6)   COMMENT "折扣",
+    `payment_price`               DECIMAL(18,6)   COMMENT "回款价",
+    `actual_sales_price`          DECIMAL(18,6)   COMMENT "实际销售价($)",
+    -- 4. 度量列：订货信息
+    `order_qty_sku`               BIGINT          COMMENT "订货数量(SKU)",
+    `order_qty_skc`               BIGINT          COMMENT "订货数量(SKC)",
+    -- 5. 维度列：时间信息与状态
+    `order_date`                  DATE            COMMENT "订货日期",
+    `est_arrival_date`            DATE            COMMENT "预计到货日期",
+    `est_arrival_month`           VARCHAR(50)     COMMENT "预计到货月份",
+    `first_available_pickup_date` DATE            COMMENT "首次可提日期",
+    `first_pickup_date`           DATE            COMMENT "首次提货日期",
+    `planned_sales_time`          VARCHAR(100)    COMMENT "计划销售时间",
+    `est_shelf_time`              VARCHAR(100)    COMMENT "预计上架时间",
+    `shelf_date`                  DATE            COMMENT "上架日期",
+    `first_sales_date`            DATE            COMMENT "首次销售日期",
+    `actual_sales_min_date`       DATE            COMMENT "实际售卖最小日期",
+    `first_order_quarter`         VARCHAR(50)     COMMENT "首次订货季度",
+    `year`                        VARCHAR(20)     COMMENT "年份",
+    `sales_cycle_label`           VARCHAR(100)    COMMENT "销售周期标签",
+    `is_confirmed`                VARCHAR(50)     COMMENT "是否确认过",
+    -- 6. 度量列：库存信息
+    `inventory_sku`               BIGINT          COMMENT "库存数量(SKU)",
+    `inventory_skc`               BIGINT          COMMENT "库存数量(SKC)",
+    `inventory_total`             BIGINT          COMMENT "库存合计",
+    `inventory_hz`                BIGINT          COMMENT "杭州库存",
+    `inventory_baoshui`           BIGINT          COMMENT "保税库存",
+    `inventory_feibao`            BIGINT          COMMENT "非保库存",
+    -- 7. 度量列：销售指标
+    `rating`                      VARCHAR(50)     COMMENT "评级",
+    `sales_cycle_days`            BIGINT          COMMENT "销售周期天数",
+    `daily_target`                DECIMAL(18,6)   COMMENT "销售目标(日)",
+    `weekly_target`               DECIMAL(18,6)   COMMENT "销售目标(周)",
+    `monthly_target`              DECIMAL(18,6)   COMMENT "销售目标(月)",
+    `quarterly_target`            DECIMAL(18,6)   COMMENT "销售目标(季)",
+    `official_daily_sales`        BIGINT          COMMENT "官网当日销售数量",
+    `cum_sales_excl_current_week` BIGINT          COMMENT "销售累积数量(不含本周)",
+    `cum_sales_sku`               BIGINT          COMMENT "销售累计数量(SKU)",
+    `cum_sales_skc`               BIGINT          COMMENT "销售累计数量(SKC)",
+    `skc_achievement`             DECIMAL(18,6)   COMMENT "SKC达成率",
+    `actual_sales_days`           BIGINT          COMMENT "实际售卖天数",
+    `actual_daily_avg`            DECIMAL(18,6)   COMMENT "实际日均销量",
+    -- 8. 度量列：补货预警
+    `replenish_qty`               BIGINT          COMMENT "补货量",
+    `replenish_num`               BIGINT          COMMENT "补货数量",
+    `replenish_correction`        VARCHAR(100)    COMMENT "补货修正",
+    `variance`                    DECIMAL(18,6)   COMMENT "差异",
+    `turnover_days`               DECIMAL(18,6)   COMMENT "周转天数",
+    `safety_days`                 BIGINT          COMMENT "安全天数",
+    `warning_status`              VARCHAR(100)    COMMENT "预警状态",
+    `has_replenish_mark`          VARCHAR(100)    COMMENT "是否有补货标记",
+    `is_replenish`                VARCHAR(50)     COMMENT "是否补货",
     -- 9. 技术字段
-    `sync_time`           DATETIME        COMMENT 'ODS同步时间',
-    `insert_date`         DATETIME        COMMENT 'DWD记录插入时间（ETL写入，增量更新用）',
-    `update_date`         DATETIME        COMMENT 'DWD记录更新时间（ETL写入，增量更新用）'
+    `sync_time`                   DATETIME        COMMENT "ODS同步时间",
+    `insert_date`                 DATETIME        COMMENT "DWD记录插入时间",
+    `update_date`                 DATETIME        COMMENT "DWD记录更新时间"
 ) ENGINE=OLAP
 PRIMARY KEY(`sku`)
-COMMENT 'DWD层-韦德商品库清洗表（SKU粒度，无需聚合，日刷新）'
-DISTRIBUTED BY HASH(`sku`) BUCKETS 8
+COMMENT "DWD层-韦德商品库清洗表(SKU粒度,无需聚合,日刷新)"
+DISTRIBUTED BY HASH(`sku`)
 PROPERTIES (
-    "replication_num" = "1",
     "compression" = "LZ4",
-    "enable_persistent_index" = "true",
+    "enable_persistent_index" = "true", 
     "fast_schema_evolution" = "true",
     "replicated_storage" = "true",
-    "in_memory" = "false",
-    "storage_format" = "DEFAULT"
+    "replication_num" = "1"
 );
 
+
+
+
+-- ============================================================
+-- DWD-4 ETL: 韦德商品库清洗表（日刷新）数据写入
+-- 来源：feishu.wd_shop (ODS) -> feishu_dwd.dwd_feishu_product_wd_d (DWD)
+-- 优化点：
+-- 1. 修正了销售目标、日均销量、差异、周转天数的 CAST 类型，适配 ODS 中的小数（DECIMAL）。
+-- 2. 修正了补货修正字段的处理，适配 ODS 中的文本“待判定”（VARCHAR）。
+-- 3. 统一了空值处理逻辑，确保与 DWD 表结构严格对应。
+-- 4. 针对飞书多维表格导出的 varchar 类型进行清洗与类型转换。
+-- 5. 金额、比率及含小数的指标统一使用 DECIMAL(38,6) 防止精度丢失。
+-- 6. 整数指标增加正则校验，过滤非数字脏数据，防止转换失败导致行被过滤。
+-- ============================================================
+
 INSERT INTO feishu_dwd.dwd_feishu_product_wd_d (
-    sku, style_no, ip, series, color_name, product_name, size, product_category,
+    -- 1. Key 列
+    sku,
+    -- 2. 维度列：商品主数据与归类
+    style_no, ip, series, color_name, product_name, size, product_category, 
+    image_url, system_item_no, min_granularity, order_unique_value,
+    -- 3. 度量列：价格信息
     tag_price, discount, payment_price, actual_sales_price,
+    -- 4. 度量列：订货信息
     order_qty_sku, order_qty_skc,
-    order_date, est_arrival_date, first_pickup_date, shelf_date, first_sales_date,
-    first_order_quarter, year, sales_cycle_label,
+    -- 5. 维度列：时间信息与状态
+    order_date, est_arrival_date, est_arrival_month, first_available_pickup_date, 
+    first_pickup_date, planned_sales_time, est_shelf_time, shelf_date, 
+    first_sales_date, actual_sales_min_date, first_order_quarter, year, 
+    sales_cycle_label, is_confirmed,
+    -- 6. 度量列：库存信息
     inventory_sku, inventory_skc, inventory_total, inventory_hz, inventory_baoshui, inventory_feibao,
-    sales_cycle_days, daily_target, weekly_target, monthly_target, quarterly_target,
-    cum_sales_sku, cum_sales_skc, skc_achievement, actual_sales_days, actual_daily_avg,
-    replenish_qty, turnover_days, safety_days, is_replenish, sync_time,
-    insert_date, update_date
+    -- 7. 度量列：销售指标
+    rating, sales_cycle_days, daily_target, weekly_target, monthly_target, quarterly_target,
+    official_daily_sales, cum_sales_excl_current_week, cum_sales_sku, cum_sales_skc, 
+    skc_achievement, actual_sales_days, actual_daily_avg,
+    -- 8. 度量列：补货预警
+    replenish_qty, replenish_num, replenish_correction, variance, 
+    turnover_days, safety_days, warning_status, has_replenish_mark, is_replenish,
+    -- 9. 技术字段
+    sync_time, insert_date, update_date
 )
 SELECT
-    SKU,
-    款号,
-    IP,
-    系列,
-    配色名,
-    商品名称,
-    码 AS size,
-    商品分类,
-    -- 价格（金额类转DECIMAL(18,6)，varchar字段需CAST）
-    CAST(吊牌价 AS DECIMAL(18,6)),
-    CAST(折扣 AS DECIMAL(18,6)),
-    CAST(回款价 AS DECIMAL(18,6)),                       -- 回款价为varchar，转decimal
-    CAST(`实际销售价（$）` AS DECIMAL(18,6)),             -- 实际销售价为varchar，转decimal
-    -- 订货数量（varchar转BIGINT整数）
-    CAST(`订货数量(sku)` AS SIGNED),
-    CAST(`订货数量(SKC)` AS SIGNED),
-    -- 时间字段
-    DATE(订货日期),
-    DATE(预计到货日期),
-    DATE(首次提货日期),
-    DATE(上架日期),
-    DATE(首次销售日期),
-    首次订货季度,
-    年份,
-    销售周期标签,
-    -- 库存字段（varchar转BIGINT整数）
-    CAST(`库存数量(SKU)` AS SIGNED),
-    CAST(`库存数量(SKC)` AS SIGNED),
-    CAST(库存合计 AS SIGNED),
-    CAST(杭州库存 AS SIGNED),
-    CAST(保税库存 AS SIGNED),
-    CAST(非保库存 AS SIGNED),
-    -- 销售指标（天数/数量转BIGINT整数，比值转DECIMAL(18,6)）
-    CAST(销售周期天数 AS SIGNED),
-    CAST(`销售目标（日）` AS SIGNED),
-    CAST(`销售目标（周）` AS SIGNED),
-    CAST(`销售目标（月）` AS SIGNED),
-    CAST(`销售目标（季）` AS SIGNED),
-    CAST(`销售累计数量(SKU)` AS SIGNED),
-    CAST(`销售累计数量(SKC)` AS SIGNED),
-    CAST(SKC达成率 AS DECIMAL(18,6)),
-    CAST(实际售卖天数 AS SIGNED),
-    CAST(实际日均销量 AS SIGNED),
-    -- 补货预警（数量/天数转BIGINT整数）
-    CAST(补货量 AS SIGNED),
-    CAST(周转天数 AS SIGNED),
-    CAST(安全天数 AS SIGNED),
-    是否补货,
-    sync_time,
-    NOW() AS insert_date,                                -- ETL写入插入时间
-    NOW() AS update_date                                 -- ETL写入更新时间
-FROM wd_shop
-WHERE SKU IS NOT NULL AND SKU <> '';                     -- 过滤空SKU
+    -- 1. Key 列 (优先取 SKU，为空则取 SKU1)
+    COALESCE(NULLIF(TRIM(SKU), ''), NULLIF(TRIM(SKU1), ''))                 AS sku,
+    
+    -- 2. 维度列：商品主数据与归类
+    COALESCE(NULLIF(TRIM(款号), ''), 'None')                                 AS style_no,
+    COALESCE(NULLIF(TRIM(IP), ''), 'None')                                   AS ip,
+    COALESCE(NULLIF(TRIM(系列), ''), 'None')                                 AS series,
+    COALESCE(NULLIF(TRIM(配色名), ''), 'None')                               AS color_name,
+    COALESCE(NULLIF(TRIM(商品名称), ''), 'None')                             AS product_name,
+    COALESCE(NULLIF(TRIM(尺码), ''), 'None')                                 AS size,
+    COALESCE(NULLIF(TRIM(商品分类), ''), 'None')                             AS product_category,
+    COALESCE(NULLIF(TRIM(图片), ''), 'None')                                 AS image_url,
+    COALESCE(NULLIF(TRIM(系统货号1), ''), 'None')                            AS system_item_no,
+    COALESCE(NULLIF(TRIM(最小颗粒度), ''), 'None')                           AS min_granularity,
+    COALESCE(NULLIF(TRIM(订货唯一值), ''), 'None')                           AS order_unique_value,
+    
+    -- 3. 度量列：价格信息
+    COALESCE(CAST(NULLIF(TRIM(吊牌价), '') AS DECIMAL(38,6)), 0)             AS tag_price,
+    COALESCE(CAST(NULLIF(TRIM(折扣), '') AS DECIMAL(38,6)), 0)               AS discount,
+    COALESCE(CAST(NULLIF(TRIM(回款价), '') AS DECIMAL(38,6)), 0)             AS payment_price,
+    COALESCE(CAST(NULLIF(TRIM(`实际销售价（$）`), '') AS DECIMAL(38,6)), 0)  AS actual_sales_price,
+    
+    -- 4. 度量列：订货信息（增加正则校验，过滤非数字字符）
+    COALESCE(CASE WHEN TRIM(`订货数量(sku)`) REGEXP '^[0-9]+$' THEN CAST(TRIM(`订货数量(sku)`) AS BIGINT) ELSE 0 END, 0) AS order_qty_sku,
+    COALESCE(CASE WHEN TRIM(`订货数量(SKC)`) REGEXP '^[0-9]+$' THEN CAST(TRIM(`订货数量(SKC)`) AS BIGINT) ELSE 0 END, 0) AS order_qty_skc,
+    
+    -- 5. 维度列：时间信息与状态
+    COALESCE(DATE(NULLIF(TRIM(订货日期), '')), DATE('1970-01-01'))           AS order_date,
+    COALESCE(DATE(NULLIF(TRIM(预计到货日期), '')), DATE('1970-01-01'))       AS est_arrival_date,
+    COALESCE(NULLIF(TRIM(预计到货月份), ''), 'None')                         AS est_arrival_month,
+    COALESCE(DATE(NULLIF(TRIM(首次可提日期), '')), DATE('1970-01-01'))       AS first_available_pickup_date,
+    COALESCE(DATE(NULLIF(TRIM(首次提货日期), '')), DATE('1970-01-01'))       AS first_pickup_date,
+    COALESCE(NULLIF(TRIM(计划销售时间), ''), 'None')                         AS planned_sales_time,
+    COALESCE(NULLIF(TRIM(预计上架时间), ''), 'None')                         AS est_shelf_time,
+    COALESCE(DATE(NULLIF(TRIM(上架日期), '')), DATE('1970-01-01'))           AS shelf_date,
+    COALESCE(DATE(NULLIF(TRIM(首次销售日期), '')), DATE('1970-01-01'))       AS first_sales_date,
+    COALESCE(DATE(NULLIF(TRIM(实际售卖最小日期), '')), DATE('1970-01-01'))   AS actual_sales_min_date,
+    COALESCE(NULLIF(TRIM(首次订货季度), ''), 'None')                         AS first_order_quarter,
+    COALESCE(NULLIF(TRIM(年份), ''), 'None')                                 AS year,
+    COALESCE(NULLIF(TRIM(销售周期标签), ''), 'None')                         AS sales_cycle_label,
+    COALESCE(NULLIF(TRIM(是否确认过), ''), 'None')                           AS is_confirmed,
+    
+    -- 6. 度量列：库存信息（增加正则校验，过滤非数字字符）
+    COALESCE(CASE WHEN TRIM(`库存数量(SKU)`) REGEXP '^[0-9]+$' THEN CAST(TRIM(`库存数量(SKU)`) AS BIGINT) ELSE 0 END, 0) AS inventory_sku,
+    COALESCE(CASE WHEN TRIM(`库存数量(SKC)`) REGEXP '^[0-9]+$' THEN CAST(TRIM(`库存数量(SKC)`) AS BIGINT) ELSE 0 END, 0) AS inventory_skc,
+    COALESCE(CASE WHEN TRIM(库存合计) REGEXP '^[0-9]+$' THEN CAST(TRIM(库存合计) AS BIGINT) ELSE 0 END, 0) AS inventory_total,
+    COALESCE(CASE WHEN TRIM(杭州库存) REGEXP '^[0-9]+$' THEN CAST(TRIM(杭州库存) AS BIGINT) ELSE 0 END, 0) AS inventory_hz,
+    COALESCE(CASE WHEN TRIM(保税库存) REGEXP '^[0-9]+$' THEN CAST(TRIM(保税库存) AS BIGINT) ELSE 0 END, 0) AS inventory_baoshui,
+    COALESCE(CASE WHEN TRIM(非保库存) REGEXP '^[0-9]+$' THEN CAST(TRIM(非保库存) AS BIGINT) ELSE 0 END, 0) AS inventory_feibao,
+    
+    -- 7. 度量列：销售指标（目标值与日均销量适配飞书小数精度）
+    COALESCE(NULLIF(TRIM(评级), ''), 'None')                                 AS rating,
+    COALESCE(CASE WHEN TRIM(销售周期天数) REGEXP '^[0-9]+$' THEN CAST(TRIM(销售周期天数) AS BIGINT) ELSE 0 END, 0) AS sales_cycle_days,
+    
+    COALESCE(CAST(NULLIF(TRIM(`销售目标（日）`), '') AS DECIMAL(38,6)), 0)   AS daily_target,
+    COALESCE(CAST(NULLIF(TRIM(`销售目标（周）`), '') AS DECIMAL(38,6)), 0)   AS weekly_target,
+    COALESCE(CAST(NULLIF(TRIM(`销售目标（月）`), '') AS DECIMAL(38,6)), 0)   AS monthly_target,
+    COALESCE(CAST(NULLIF(TRIM(`销售目标（季）`), '') AS DECIMAL(38,6)), 0)   AS quarterly_target,
+    
+    COALESCE(CASE WHEN TRIM(官网当日销售) REGEXP '^[0-9]+$' THEN CAST(TRIM(官网当日销售) AS BIGINT) ELSE 0 END, 0) AS official_daily_sales,
+    COALESCE(CASE WHEN TRIM(`销售累积数量(不含本周）`) REGEXP '^[0-9]+$' THEN CAST(TRIM(`销售累积数量(不含本周）`) AS BIGINT) ELSE 0 END, 0) AS cum_sales_excl_current_week,
+    COALESCE(CASE WHEN TRIM(`销售累计数量(SKU)`) REGEXP '^[0-9]+$' THEN CAST(TRIM(`销售累计数量(SKU)`) AS BIGINT) ELSE 0 END, 0) AS cum_sales_sku,
+    COALESCE(CASE WHEN TRIM(`销售累计数量(SKC)`) REGEXP '^[0-9]+$' THEN CAST(TRIM(`销售累计数量(SKC)`) AS BIGINT) ELSE 0 END, 0) AS cum_sales_skc,
+    COALESCE(CAST(NULLIF(TRIM(SKC达成率), '') AS DECIMAL(38,6)), 0)          AS skc_achievement,
+    COALESCE(CASE WHEN TRIM(实际售卖天数) REGEXP '^[0-9]+$' THEN CAST(TRIM(实际售卖天数) AS BIGINT) ELSE 0 END, 0) AS actual_sales_days,
+    COALESCE(CAST(NULLIF(TRIM(实际日均销量), '') AS DECIMAL(38,6)), 0)       AS actual_daily_avg,
+    
+    -- 8. 度量列：补货预警（补货修正字段为文本状态，直接保留字符串）
+    COALESCE(CASE WHEN TRIM(补货量) REGEXP '^[0-9]+$' THEN CAST(TRIM(补货量) AS BIGINT) ELSE 0 END, 0) AS replenish_qty,
+    COALESCE(CASE WHEN TRIM(补货数量) REGEXP '^[0-9]+$' THEN CAST(TRIM(补货数量) AS BIGINT) ELSE 0 END, 0) AS replenish_num,
+    
+    COALESCE(NULLIF(TRIM(补货修正), ''), 'None')                             AS replenish_correction,
+    COALESCE(CAST(NULLIF(TRIM(差异), '') AS DECIMAL(38,6)), 0)               AS variance,
+    COALESCE(CAST(NULLIF(TRIM(周转天数), '') AS DECIMAL(38,6)), 0)           AS turnover_days,
+    
+    COALESCE(CASE WHEN TRIM(安全天数) REGEXP '^[0-9]+$' THEN CAST(TRIM(安全天数) AS BIGINT) ELSE 0 END, 0) AS safety_days,
+    COALESCE(NULLIF(TRIM(预警), ''), 'None')                                 AS warning_status,
+    COALESCE(NULLIF(TRIM(是否有补货标记), ''), 'None')                       AS has_replenish_mark,
+    COALESCE(NULLIF(TRIM(是否补货), ''), 'None')                             AS is_replenish,
+    
+    -- 9. 技术字段
+    COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))             AS sync_time,
+    NOW()                                                                    AS insert_date,
+    NOW()                                                                    AS update_date
+FROM feishu.wd_shop
+-- 过滤条件：只要 SKU 或 SKU1 其中一个有值即可，避免误杀
+WHERE COALESCE(NULLIF(TRIM(SKU), ''), NULLIF(TRIM(SKU1), '')) IS NOT NULL;
+
+
+
 ```
 
 ### 4.5 DWD-5：361商品库清洗表
@@ -1449,58 +1555,57 @@ WHERE SKU IS NOT NULL AND SKU <> '';                     -- 过滤空SKU
 DROP TABLE IF EXISTS feishu_dwd.dwd_feishu_product_361_d;
 CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_product_361_d (
     -- 1. Key 列（PRIMARY KEY 模型，SKU 为业务主键，须为前 N 列）
-    `sku`                 VARCHAR(64)     COMMENT 'SKU编码（主键）',
+    `sku`                 VARCHAR(128)     COMMENT "SKU编码(主键)",
     -- 2. 维度列
-    `style_no`            VARCHAR(64)     COMMENT '商品货号（款号）',
-    `ip`                  VARCHAR(50)     COMMENT 'IP',
-    `series`              VARCHAR(50)     COMMENT '系列',
-    `product_name`        VARCHAR(200)    COMMENT '商品名称',
-    `category`            VARCHAR(50)     COMMENT '品类',
-    `size_us`             VARCHAR(20)     COMMENT '美码（尺码）',
-    `size_code`           VARCHAR(50)     COMMENT '规格编码',
+    `style_no`            VARCHAR(128)     COMMENT "商品货号（款号）",
+    `ip`                  VARCHAR(100)     COMMENT "IP",
+    `series`              VARCHAR(100)     COMMENT "系列",
+    `product_name`        VARCHAR(500)    COMMENT "商品名称",
+    `category`            VARCHAR(100)     COMMENT "品类",
+    `size_us`             VARCHAR(50)     COMMENT "美码（尺码）",
+    `size_code`           VARCHAR(100)     COMMENT "规格编码",
     -- 3. 度量列
-    `tag_price`           DECIMAL(18,6)   COMMENT '吊牌价（金额保留6位小数）',
+    `tag_price`           DECIMAL(18,6)   COMMENT "吊牌价（金额保留6位小数）",
     -- 4. 维度列：订货信息
-    `order_date`          DATE            COMMENT '订货日期',
-    `order_qty`           BIGINT          COMMENT '订货数量（varchar转BIGINT整数）',
-    `is_ordered`          VARCHAR(10)     COMMENT '是否订过货',
-    `order_method`        VARCHAR(50)     COMMENT '下单方式',
+    `order_date`          DATE            COMMENT "订货日期",   
+    `order_qty`           BIGINT          COMMENT "订货数量（varchar转BIGINT整数）",
+    `is_ordered`          VARCHAR(50)     COMMENT "是否订过货",
+    `order_method`        VARCHAR(50)     COMMENT "下单方式",
     -- 5. 维度列：到货信息
-    `est_arrival_month`   VARCHAR(20)     COMMENT '预计到货月份',
-    `est_arrival_date`    DATE            COMMENT '预计到货日期',
-    `arrival_confirmed`   VARCHAR(10)     COMMENT '到货月份是否确认',
-    `brand_confirm_date`  DATE            COMMENT '品牌方确认日期',
+    `est_arrival_month`   VARCHAR(50)     COMMENT "预计到货月份",
+    `est_arrival_date`    DATE            COMMENT "预计到货日期",
+    `arrival_confirmed`   VARCHAR(50)     COMMENT "到货月份是否确认",
+    `brand_confirm_date`  DATE            COMMENT "品牌方确认日期",
     -- 6. 维度列：提货信息
-    `plan_pickup_date`    DATE            COMMENT '计划提货日期',
-    `first_pickup_date`   DATE            COMMENT '首次提货日期（ODS为varchar，CAST为DATE，异常值置NULL）',
-    `picked_qty`          BIGINT          COMMENT '已提数量（varchar转BIGINT整数）',
-    `unpicked_qty`        BIGINT          COMMENT '未提可提数量（varchar转BIGINT整数）',
+    `plan_pickup_date`    DATE            COMMENT "计划提货日期",
+    `first_pickup_date`   DATE            COMMENT "首次提货日期（ODS为varchar，CAST为DATE，异常值置NULL）",
+    `picked_qty`          BIGINT          COMMENT "已提数量（varchar转BIGINT整数）",
+    `unpicked_qty`        BIGINT          COMMENT "未提可提数量（varchar转BIGINT整数）",
     -- 7. 维度列：上架信息
-    `est_shelf_month`     VARCHAR(20)     COMMENT '预计上架月份',
-    `overseas_shelf_date` DATE            COMMENT '海外预计上架时间',
-    `actual_shelf_date`   DATE            COMMENT '实际上架时间',
-    `is_on_shelf`         VARCHAR(10)     COMMENT '是否上架',
+    `est_shelf_month`     VARCHAR(20)     COMMENT "预计上架月份",
+    `overseas_shelf_date` DATE            COMMENT "海外预计上架时间",
+    `actual_shelf_date`   DATE            COMMENT "实际上架时间",
+    `is_on_shelf`         VARCHAR(50)     COMMENT "是否上架",
     -- 8. 维度列：运营
-    `material_status`     VARCHAR(50)     COMMENT '素材情况',
-    `image_status`        VARCHAR(50)     COMMENT '图片完成情况',
-    `first_order_quarter` VARCHAR(20)     COMMENT '首次订货到货季度',
+    `material_status`     VARCHAR(50)     COMMENT "素材情况",
+    `image_status`        VARCHAR(50)     COMMENT "图片完成情况",
+    `first_order_quarter` VARCHAR(20)     COMMENT "首次订货到货季度",
     -- 9. 技术字段
-    `sync_time`           DATETIME        COMMENT 'ODS同步时间',
-    `insert_date`         DATETIME        COMMENT 'DWD记录插入时间（ETL写入，增量更新用）',
-    `update_date`         DATETIME        COMMENT 'DWD记录更新时间（ETL写入，增量更新用）'
+    `sync_time`           DATETIME        COMMENT "ODS同步时间",
+    `insert_date`         DATETIME        COMMENT "DWD记录插入时间（ETL写入，增量更新用）",
+    `update_date`         DATETIME        COMMENT "DWD记录更新时间（ETL写入，增量更新用）"
 ) ENGINE=OLAP
 PRIMARY KEY(`sku`)
-COMMENT 'DWD层-361商品库清洗表（SKU粒度，无需聚合，日刷新）'
-DISTRIBUTED BY HASH(`sku`) BUCKETS 8
+COMMENT "DWD层-361商品库清洗表(SKU粒度,无需聚合,日刷新)"
+DISTRIBUTED BY HASH(`sku`)
 PROPERTIES (
-    "replication_num" = "1",
     "compression" = "LZ4",
-    "enable_persistent_index" = "true",
+    "enable_persistent_index" = "true", -- PK模型专属优化，开启
     "fast_schema_evolution" = "true",
     "replicated_storage" = "true",
-    "in_memory" = "false",
-    "storage_format" = "DEFAULT"
+    "replication_num" = "1"
 );
+
 
 INSERT INTO feishu_dwd.dwd_feishu_product_361_d (
     sku, style_no, ip, series, product_name, category, size_us, size_code, tag_price,
@@ -1512,44 +1617,66 @@ INSERT INTO feishu_dwd.dwd_feishu_product_361_d (
     insert_date, update_date
 )
 SELECT
-    SKU,
-    商品货号 AS style_no,
-    IP,
-    系列,
-    商品名称,
-    品类,
-    美码 AS size_us,
-    规格编码 AS size_code,
-    CAST(吊牌价 AS DECIMAL(18,6)),                       -- 金额保留6位小数
-    -- 订货信息
-    DATE(订货日期),
-    CAST(订货数量 AS SIGNED),                            -- varchar转BIGINT整数
-    是否订过货,
-    下单方式,
-    -- 到货信息
-    预计到货月份,
-    DATE(预计到货日期),
-    到货月份是否确认,
-    DATE(品牌方确认日期),
-    -- 提货信息
-    DATE(计划提货日期),
-    DATE(首次提货日期),                                  -- ODS为varchar，转DATE，异常值自动置NULL
-    CAST(已提数量 AS SIGNED),                            -- varchar转BIGINT整数
-    CAST(未提可提数量 AS SIGNED),                        -- varchar转BIGINT整数
-    -- 上架信息
-    预计上架月份,
-    DATE(海外预计上架时间),
-    DATE(实际上架时间),
-    是否上架,
-    -- 运营
-    素材情况,
-    图片完成情况,
-    首次订货到货季度,
-    sync_time,
-    NOW() AS insert_date,                                -- ETL写入插入时间
-    NOW() AS update_date                                 -- ETL写入更新时间
-FROM t_361_shop
-WHERE SKU IS NOT NULL AND SKU <> '';                     -- 过滤空SKU（577条空SKU被过滤）
+    -- 1. 基础维度 (ODS均为VARCHAR，保留TRIM)
+    COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                 AS sku,
+    COALESCE(NULLIF(TRIM(商品货号), ''), 'None')                            AS style_no,
+    COALESCE(NULLIF(TRIM(IP), ''), 'None')                                  AS ip,
+    COALESCE(NULLIF(TRIM(系列), ''), 'None')                                AS series,
+    COALESCE(NULLIF(TRIM(商品名称), ''), 'None')                            AS product_name,
+    COALESCE(NULLIF(TRIM(品类), ''), 'None')                                AS category,
+    COALESCE(NULLIF(TRIM(美码), ''), 'None')                                AS size_us,
+    COALESCE(NULLIF(TRIM(规格编码), ''), 'None')                            AS size_code,
+    
+    -- 2. 度量 (ODS为DECIMAL，去掉TRIM，直接CAST)
+    COALESCE(CAST(吊牌价 AS DECIMAL(18,6)), 0)                              AS tag_price,                       -- 金额保留6位小数
+    
+    -- 3. 订货信息
+    -- ODS为DATETIME，去掉TRIM，直接CAST为DATE
+    COALESCE(CAST(订货日期 AS DATE), '1970-01-01')                          AS order_date,
+    -- ODS为VARCHAR，保留TRIM，转BIGINT
+    COALESCE(CAST(NULLIF(TRIM(订货数量), '') AS BIGINT), 0)                 AS order_qty,
+    COALESCE(NULLIF(TRIM(是否订过货), ''), 'None')                          AS is_ordered,
+    COALESCE(NULLIF(TRIM(下单方式), ''), 'None')                            AS order_method,
+    
+    -- 4. 到货信息
+    COALESCE(NULLIF(TRIM(预计到货月份), ''), 'None')                        AS est_arrival_month,
+    -- ODS为DATETIME，去掉TRIM
+    COALESCE(CAST(预计到货日期 AS DATE), '1970-01-01')                      AS est_arrival_date,
+    COALESCE(NULLIF(TRIM(到货月份是否确认), ''), 'None')                    AS arrival_confirmed,
+    -- ODS为DATETIME，去掉TRIM
+    COALESCE(CAST(品牌方确认日期 AS DATE), '1970-01-01')                    AS brand_confirm_date,
+    
+    -- 5. 提货信息
+    -- ODS为DATETIME，去掉TRIM
+    COALESCE(CAST(计划提货日期 AS DATE), '1970-01-01')                      AS plan_pickup_date,
+    -- ODS为VARCHAR，保留TRIM，转DATE
+    COALESCE(CAST(NULLIF(TRIM(首次提货日期), '') AS DATE), '1970-01-01')    AS first_pickup_date,
+    -- ODS为VARCHAR，保留TRIM，转BIGINT
+    COALESCE(CAST(NULLIF(TRIM(已提数量), '') AS BIGINT), 0)                 AS picked_qty,
+    COALESCE(CAST(NULLIF(TRIM(未提可提数量), '') AS BIGINT), 0)             AS unpicked_qty,
+    
+    -- 6. 上架信息
+    COALESCE(NULLIF(TRIM(预计上架月份), ''), 'None')                        AS est_shelf_month,
+    -- ODS为DATETIME，去掉TRIM
+    COALESCE(CAST(海外预计上架时间 AS DATE), '1970-01-01')                  AS overseas_shelf_date,
+    -- ODS为DATETIME，去掉TRIM
+    COALESCE(CAST(实际上架时间 AS DATE), '1970-01-01')                      AS actual_shelf_date,
+    COALESCE(NULLIF(TRIM(是否上架), ''), 'None')                            AS is_on_shelf,
+    
+    -- 7. 运营 (ODS均为VARCHAR，保留TRIM)
+    COALESCE(NULLIF(TRIM(素材情况), ''), 'None')                            AS material_status,
+    COALESCE(NULLIF(TRIM(图片完成情况), ''), 'None')                        AS image_status,
+    COALESCE(NULLIF(TRIM(首次订货到货季度), ''), 'None')                    AS first_order_quarter,
+    
+    -- 8. 系统字段 (ODS为DATETIME，去掉TRIM)
+    COALESCE(sync_time, '1970-01-01 00:00:00')                              AS sync_time,
+    NOW()                                                                   AS insert_date,                                -- ETL写入插入时间
+    NOW()                                                                   AS update_date                                 -- ETL写入更新时间
+FROM feishu.t_361_shop
+WHERE SKU IS NOT NULL AND TRIM(SKU) <> '';                    -- 过滤空SKU（577条空SKU被过滤）
+
+
+
 ```
 
 ### 4.6 DWD-6：统一商品库表
@@ -1590,43 +1717,41 @@ WHERE SKU IS NOT NULL AND SKU <> '';                     -- 过滤空SKU（577�
 DROP TABLE IF EXISTS feishu_dwd.dwd_feishu_product_all_d;
 CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_product_all_d (
     -- 1. Key 列（PRIMARY KEY 模型，SKU+brand 为业务主键，须为前 N 列）
-    `sku`                 VARCHAR(64)     COMMENT 'SKU编码（主键组成部分）',
-    `brand`               VARCHAR(20)     COMMENT '品牌：361 / 韦德（主键组成部分，区分来源）',
+    `sku`                 VARCHAR(128)     COMMENT "SKU编码(主键组成部分)",
+    `brand`               VARCHAR(20)     COMMENT "品牌:361/韦德(主键组成部分)",
     -- 2. 维度列
-    `style_no`            VARCHAR(64)     COMMENT '款号/商品货号',
-    `ip`                  VARCHAR(50)     COMMENT 'IP',
-    `series`              VARCHAR(50)     COMMENT '系列',
-    `color_name`          VARCHAR(50)     COMMENT '配色名（韦德有，361为空）',
-    `product_name`        VARCHAR(200)    COMMENT '商品名称',
-    `category`            VARCHAR(50)     COMMENT '品类/商品分类',
-    `size`                VARCHAR(20)     COMMENT '尺码（韦德码/361美码统一）',
+    `style_no`            VARCHAR(128)     COMMENT "款号/商品货号(主键组成部分)",
+    `ip`                  VARCHAR(100)     COMMENT "IP(主键组成部分)",
+    `series`              VARCHAR(100)     COMMENT "系列(主键组成部分)",
+    `color_name`          VARCHAR(100)     COMMENT "配色名（韦德有，361为空）",
+    `product_name`        VARCHAR(500)    COMMENT "商品名称",
+    `category`            VARCHAR(100)     COMMENT "品类/商品分类(主键组成部分)",
+    `size`                VARCHAR(50)     COMMENT "尺码（韦德码/361美码统一）",
     -- 3. 度量列
-    `tag_price`           DECIMAL(18,6)   COMMENT '吊牌价（金额保留6位小数）',
-    `order_qty`           BIGINT          COMMENT '订货数量（统一为SKU维度，整数）',
+    `tag_price`           DECIMAL(18,6)   COMMENT "吊牌价（金额保留6位小数）",
+    `order_qty`           BIGINT          COMMENT "订货数量（统一为SKU维度，整数）",
     -- 4. 维度列：订货/上架/销售时间（统一口径）
-    `order_date`          DATE            COMMENT '订货日期',
-    `shelf_date`          DATE            COMMENT '上架日期（统一口径：韦德取shelf_date，361取actual_shelf_date）',
-    `first_sales_date`    DATE            COMMENT '首次销售日期（韦德有，361为空）',
-    `first_order_quarter` VARCHAR(20)     COMMENT '首次订货季度',
-    `year`                VARCHAR(10)     COMMENT '年份（韦德有，361为空）',
+    `order_date`          DATE            COMMENT "订货日期(主键组成部分)",
+    `shelf_date`          DATE            COMMENT "上架日期（统一口径：韦德取shelf_date，361取actual_shelf_date）",
+    `first_sales_date`    DATE            COMMENT "首次销售日期（韦德有，361为空）",
+    `first_order_quarter` VARCHAR(50)     COMMENT "首次订货季度(主键组成部分)",
+    `year`                VARCHAR(50)     COMMENT "年份（韦德有，361为空）",    
     -- 5. 度量列：库存信息（韦德有详细库存，361为空）
-    `inventory_sku`       BIGINT          COMMENT '库存数量(SKU)（韦德有，361为空，整数）',
+    `inventory_sku`       BIGINT          COMMENT "库存数量(SKU)（韦德有，361为空，整数）",
     -- 6. 技术字段
-    `sync_time`           DATETIME        COMMENT 'ODS同步时间',
-    `insert_date`         DATETIME        COMMENT 'DWD记录插入时间（ETL写入，增量更新用）',
-    `update_date`         DATETIME        COMMENT 'DWD记录更新时间（ETL写入，增量更新用）'
+    `sync_time`           DATETIME        COMMENT "ODS同步时间",
+    `insert_date`         DATETIME        COMMENT "DWD记录插入时间（ETL写入，增量更新用）",
+    `update_date`         DATETIME        COMMENT "DWD记录更新时间（ETL写入，增量更新用）"
 ) ENGINE=OLAP
 PRIMARY KEY(`sku`, `brand`)
-COMMENT 'DWD层-统一商品库表（361+韦德，SKU+品牌粒度，核心字段统一，日刷新）'
-DISTRIBUTED BY HASH(`sku`) BUCKETS 8
+COMMENT "DWD层-统一商品库表(361+韦德,SKU+品牌粒度,核心字段统一,日刷新)"
+DISTRIBUTED BY HASH(`sku`)
 PROPERTIES (
-    "replication_num" = "1",
     "compression" = "LZ4",
-    "enable_persistent_index" = "true",
+    "enable_persistent_index" = "true", -- PK模型专属优化，开启
     "fast_schema_evolution" = "true",
     "replicated_storage" = "true",
-    "in_memory" = "false",
-    "storage_format" = "DEFAULT"
+    "replication_num" = "1"
 );
 
 -- 韦德商品库（来源DWD-4）
@@ -1637,21 +1762,29 @@ INSERT INTO feishu_dwd.dwd_feishu_product_all_d (
     insert_date, update_date
 )
 SELECT
-    sku, '韦德' AS brand, style_no, ip, series, color_name, product_name,
-    product_category AS category, size,                                 -- 韦德 product_category → 统一 category
-    tag_price,
-    order_qty_sku AS order_qty,                          -- 统一为SKU维度订货量
-    order_date,
-    shelf_date,                                          -- 韦德直接取上架日期
-    first_sales_date,
-    first_order_quarter,
-    year,
-    inventory_sku,
-    sync_time,
-    NOW() AS insert_date,                                -- ETL写入插入时间
-    NOW() AS update_date                                 -- ETL写入更新时间
-FROM feishu_dwd.dwd_feishu_product_wd_d
-WHERE sku IS NOT NULL;
+    wd.sku, 
+    '韦德' AS brand, 
+    wd.style_no, 
+    wd.ip, 
+    wd.series, 
+    wd.color_name, 
+    wd.product_name,
+    wd.product_category AS category,                                 -- 韦德 product_category → 统一 category
+    wd.size,
+    wd.tag_price,
+    wd.order_qty_sku AS order_qty,                                   -- 统一为SKU维度订货量
+    wd.order_date,
+    wd.shelf_date,                                                   -- 韦德直接取上架日期
+    wd.first_sales_date,
+    wd.first_order_quarter,
+    wd.year,
+    wd.inventory_sku,
+    wd.sync_time,
+    NOW() AS insert_date,                                            -- ETL写入插入时间
+    NOW() AS update_date                                             -- ETL写入更新时间
+FROM feishu_dwd.dwd_feishu_product_wd_d wd
+WHERE wd.sku IS NOT NULL;
+
 
 -- 361商品库（来源DWD-5）
 INSERT INTO feishu_dwd.dwd_feishu_product_all_d (
@@ -1661,24 +1794,29 @@ INSERT INTO feishu_dwd.dwd_feishu_product_all_d (
     insert_date, update_date
 )
 SELECT
-    sku, '361' AS brand, style_no, ip, series,
-    NULL AS color_name,                                  -- 361无配色名
-    product_name,
-    category,
-    size_us AS size,                                     -- 361用美码作为统一尺码
-    tag_price,
-    order_qty,
-    order_date,
-    actual_shelf_date AS shelf_date,                     -- 361取实际上架时间作为统一上架日期
-    NULL AS first_sales_date,                            -- 361商品库无首次销售日期（在销售表中）
-    first_order_quarter,
-    NULL AS year,                                        -- 361商品库无年份字段
-    NULL AS inventory_sku,                               -- 361商品库无SKU维度库存
-    sync_time,
-    NOW() AS insert_date,
-    NOW() AS update_date
+    sku                                                                   AS sku,
+    '361'                                                                 AS brand,
+    style_no                                                              AS style_no,
+    ip                                                                    AS ip,
+    series                                                                AS series,
+    NULL                                                                  AS color_name,                                  -- 361无配色名
+    product_name                                                          AS product_name,
+    category                                                              AS category,
+    size_us                                                               AS size,                                        -- 361用美码作为统一尺码
+    tag_price                                                             AS tag_price,
+    order_qty                                                             AS order_qty,
+    order_date                                                            AS order_date,
+    actual_shelf_date                                                     AS shelf_date,                                  -- 361取实际上架时间作为统一上架日期
+    NULL                                                                  AS first_sales_date,                            -- 361商品库无首次销售日期（在销售表中）
+    first_order_quarter                                                   AS first_order_quarter,
+    NULL                                                                  AS year,                                        -- 361商品库无年份字段
+    NULL                                                                  AS inventory_sku,                               -- 361商品库无SKU维度库存
+    sync_time                                                             AS sync_time,
+    NOW()                                                                 AS insert_date,
+    NOW()                                                                 AS update_date
 FROM feishu_dwd.dwd_feishu_product_361_d
 WHERE sku IS NOT NULL;
+
 
 -- 验证：
 -- SELECT brand, COUNT(*) FROM feishu_dwd.dwd_feishu_product_all_d GROUP BY brand;  -- 各品牌SKU数
@@ -1707,87 +1845,82 @@ WHERE sku IS NOT NULL;
 -- 5. 字段数变化：ODS 24字段 → DWD 26字段（新增 insert_date/update_date）
 -- 6. 注意：ODS中 sku 为小写字段名，与其他表 SKU（大写）不同，关联时需统一大小写
 -- ============================================================
-DROP TABLE IF EXISTS feishu_dwd.dwd_feishu_inventory_d;
-CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_inventory_d (
+DROP TABLE IF EXISTS feishu_dwd.dwd_feishu_inventory_wdpinpai_d;
+CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_inventory_wdpinpai_d (
     -- 1. Key 列（前 N 列，顺序与 PRIMARY KEY 一致；inventory_date 须为 Key 列以支持分区）
-    `id`                  BIGINT          COMMENT '自增主键（来源ODS的id）',
-    `inventory_date`      DATE            COMMENT '品牌方库存更新日期（分区键）',
+    `id`                  BIGINT          COMMENT "自增主键(主键,来源ODS的id)",
+    `inventory_date`      DATE            COMMENT "品牌方库存更新日期（分区键）",
     -- 2. 维度列
-    `record_id`           VARCHAR(64)     COMMENT '飞书记录唯一ID',
-    `sku`                 VARCHAR(64)     COMMENT 'sku编码（ODS小写sku，注意与SKU区分）',
-    `style_no`            VARCHAR(64)     COMMENT '款号',
-    `quarter`             VARCHAR(20)     COMMENT '季度',
-    `ip`                  VARCHAR(50)     COMMENT 'IP',
-    `product_name`        VARCHAR(200)    COMMENT '品名',
-    `series`              VARCHAR(50)     COMMENT '系列',
-    `color_name`          VARCHAR(50)     COMMENT '配色名',
-    `category`            VARCHAR(50)     COMMENT '商品类别',
-    `size`                VARCHAR(20)     COMMENT '尺码',
+    `record_id`           VARCHAR(64)     COMMENT "飞书记录唯一ID",
+    `sku`                 VARCHAR(128)     COMMENT "sku编码（ODS小写sku，注意与SKU区分）",
+    `style_no`            VARCHAR(128)     COMMENT "款号",
+    `quarter`             VARCHAR(50)     COMMENT "季度",
+    `ip`                  VARCHAR(100)     COMMENT "IP",
+    `product_name`        VARCHAR(500)    COMMENT "品名",
+    `series`              VARCHAR(50)     COMMENT "系列",
+    `color_name`          VARCHAR(100)     COMMENT "配色名",
+    `category`            VARCHAR(100)     COMMENT "商品类别",
+    `size`                VARCHAR(50)     COMMENT "尺码",
     -- 3. 度量列：库存指标（数量为整数，金额保留6位小数）
-    `inventory_qty`       BIGINT          COMMENT '库存数量（整数）',
-    `price_with_tax`      DECIMAL(18,6)   COMMENT '含税单价（金额保留6位小数）',
-    `tag_price`           DECIMAL(18,6)   COMMENT '吊牌价（金额保留6位小数）',
-    `order_qty`           BIGINT          COMMENT '订货数量（varchar转BIGINT整数）',
-    `picked_qty`          BIGINT          COMMENT '已提数量（varchar转BIGINT整数）',
-    `unpicked_qty`        BIGINT          COMMENT '未提数量（varchar转BIGINT整数）',
+    `inventory_qty`       BIGINT          COMMENT "库存数量(整数)",
+    `price_with_tax`      DECIMAL(18,6)   COMMENT "含税单价(金额保留6位小数)",
+    `tag_price`           DECIMAL(18,6)   COMMENT "吊牌价(金额保留6位小数)",
+    `order_qty`           BIGINT          COMMENT "订货数量(varchar转BIGINT整数)",
+    `picked_qty`          BIGINT          COMMENT "已提数量(varchar转BIGINT整数)",
+    `unpicked_qty`        BIGINT          COMMENT "未提数量(varchar转BIGINT整数)",
     -- 4. 维度列：业务标识
-    `pickup_flag`         VARCHAR(50)     COMMENT '提货标识',
-    `min_granularity`     VARCHAR(100)    COMMENT '最小颗粒度',
+    `pickup_flag`         VARCHAR(50)     COMMENT "提货标识",
+    `min_granularity`     VARCHAR(100)    COMMENT "最小颗粒度",
     -- 5. 技术字段
-    `sync_time`           DATETIME        COMMENT 'ODS同步时间',
-    `insert_date`         DATETIME        COMMENT 'DWD记录插入时间（ETL写入，增量更新用）',
-    `update_date`         DATETIME        COMMENT 'DWD记录更新时间（ETL写入，增量更新用）'
+    `sync_time`           DATETIME        COMMENT "ODS同步时间",
+    `insert_date`         DATETIME        COMMENT "DWD记录插入时间（ETL写入，增量更新用）",
+    `update_date`         DATETIME        COMMENT "DWD记录更新时间（ETL写入，增量更新用）"
 ) ENGINE=OLAP
 PRIMARY KEY(`id`, `inventory_date`)
-COMMENT 'DWD层-品牌方库存清洗表（SKU+日期粒度，日刷新）'
-PARTITION BY RANGE(`inventory_date`) ()
-DISTRIBUTED BY HASH(`id`) BUCKETS 8
+COMMENT "DWD层-品牌方库存清洗表(SKU+日期粒度,日刷新)"
+DISTRIBUTED BY HASH(`id`)
 PROPERTIES (
-    "replication_num" = "1",
     "compression" = "LZ4",
-    "in_memory" = "false",
-    "storage_format" = "DEFAULT",
-    "dynamic_partition.enable" = "true",
-    "dynamic_partition.time_unit" = "DAY",
-    "dynamic_partition.start" = "-365",
-    "dynamic_partition.end" = "3",
-    "dynamic_partition.prefix" = "p",
-    "dynamic_partition.create_history_partition" = "true"
+    "enable_persistent_index" = "true", -- PK模型专属优化，开启
+    "fast_schema_evolution" = "true",
+    "replicated_storage" = "true",
+    "replication_num" = "1"
 );
 
-INSERT INTO feishu_dwd.dwd_feishu_inventory_d (
+INSERT INTO feishu_dwd.dwd_feishu_inventory_wdpinpai_d (
     id, inventory_date, record_id, sku, style_no, quarter, ip, product_name, series,
     color_name, category, size,
     inventory_qty, price_with_tax, tag_price, order_qty, picked_qty, unpicked_qty,
     pickup_flag, min_granularity, sync_time, insert_date, update_date
 )
 SELECT
-    id,
-    DATE(品牌方库存更新日期) AS inventory_date,
-    record_id,
-    sku,                                                 -- 注意：小写sku
-    款号 AS style_no,
-    季度 AS quarter,
-    IP,
-    品名 AS product_name,
-    系列 AS series,
-    配色名 AS color_name,
-    商品类别 AS category,
-    尺码 AS size,
+    inv.id                                                                    AS id,
+    COALESCE(DATE(NULLIF(TRIM(inv.品牌方库存更新日期), '')), DATE('1970-01-01')) AS inventory_date,
+    COALESCE(NULLIF(TRIM(inv.record_id), ''), 'None')                         AS record_id,
+    COALESCE(NULLIF(TRIM(inv.sku), ''), 'None')                               AS sku,
+    COALESCE(NULLIF(TRIM(inv.款号), ''), 'None')                              AS style_no,
+    COALESCE(NULLIF(TRIM(inv.季度), ''), 'None')                              AS quarter,
+    COALESCE(NULLIF(TRIM(inv.IP), ''), 'None')                                AS ip,
+    COALESCE(NULLIF(TRIM(inv.品名), ''), 'None')                              AS product_name,
+    COALESCE(NULLIF(TRIM(inv.系列), ''), 'None')                              AS series,
+    COALESCE(NULLIF(TRIM(inv.配色名), ''), 'None')                            AS color_name,
+    COALESCE(NULLIF(TRIM(inv.商品类别), ''), 'None')                          AS category,
+    COALESCE(NULLIF(TRIM(inv.尺码), ''), 'None')                              AS size,
     -- 库存指标（数量转BIGINT整数，金额转DECIMAL(18,6)）
-    CAST(库存数量 AS SIGNED),
-    CAST(含税单价 AS DECIMAL(18,6)),
-    CAST(吊牌价 AS DECIMAL(18,6)),
-    CAST(订货数量 AS SIGNED),                            -- varchar转BIGINT整数
-    CAST(已提数量 AS SIGNED),                            -- varchar转BIGINT整数
-    CAST(未提数量 AS SIGNED),                            -- varchar转BIGINT整数
-    提货标识 AS pickup_flag,
-    最小颗粒度 AS min_granularity,
-    sync_time,
-    NOW() AS insert_date,                                -- ETL写入插入时间
-    NOW() AS update_date                                 -- ETL写入更新时间
-FROM wd_pinpaikucun
-WHERE sku IS NOT NULL AND sku <> '';                     -- 过滤空sku
+    COALESCE(CAST(NULLIF(TRIM(inv.库存数量), '') AS SIGNED), 0)               AS inventory_qty,
+    COALESCE(CAST(NULLIF(TRIM(inv.含税单价), '') AS DECIMAL(18,6)), 0)        AS price_with_tax,
+    COALESCE(CAST(NULLIF(TRIM(inv.吊牌价), '') AS DECIMAL(18,6)), 0)          AS tag_price,
+    COALESCE(CAST(NULLIF(TRIM(inv.订货数量), '') AS SIGNED), 0)               AS order_qty,                            -- varchar转BIGINT整数
+    COALESCE(CAST(NULLIF(TRIM(inv.已提数量), '') AS SIGNED), 0)               AS picked_qty,                           -- varchar转BIGINT整数
+    COALESCE(CAST(NULLIF(TRIM(inv.未提数量), '') AS SIGNED), 0)               AS unpicked_qty,                         -- varchar转BIGINT整数
+    COALESCE(NULLIF(TRIM(inv.提货标识), ''), 'None')                          AS pickup_flag,
+    COALESCE(NULLIF(TRIM(inv.最小颗粒度), ''), 'None')                        AS min_granularity,
+    COALESCE(inv.sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))          AS sync_time,
+    NOW()                                                                     AS insert_date,
+    NOW()                                                                     AS update_date
+FROM feishu.wd_pinpaikucun inv
+WHERE inv.sku IS NOT NULL AND TRIM(inv.sku) <> '';
+
 ```
 
 ### 4.8 DWD-8：OTB订货计划清洗表
@@ -1817,58 +1950,58 @@ WHERE sku IS NOT NULL AND sku <> '';                     -- 过滤空sku
 --    两者语义不同，均保留
 -- 7. 主键设计：以 (ip, year) 为业务主键（PRIMARY KEY），record_id 作为普通字段保留溯源
 -- ============================================================
-DROP TABLE IF EXISTS feishu_dwd.dwd_feishu_otb_d;
-CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_otb_d (
+DROP TABLE IF EXISTS feishu_dwd.dwd_feishu_otb_wd_d;
+CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_otb_wd_d (
     -- 1. Key 列（PRIMARY KEY 模型，ip+year 为业务主键，须为前 N 列）
-    `ip`                  VARCHAR(50)     COMMENT 'IP（主键组成部分）',
-    `year`                VARCHAR(10)     COMMENT '年度（主键组成部分）',
+    `ip`                  VARCHAR(100)     COMMENT "IP(主键组成部分)",
+    `year`                VARCHAR(20)     COMMENT "年度（主键组成部分）",
     -- 2. 维度列
-    `id`                  BIGINT          COMMENT '自增主键（来源ODS的id，溯源用）',
-    `record_id`           VARCHAR(64)     COMMENT '飞书记录唯一ID（溯源用）',
+    `id`                  BIGINT          COMMENT "自增主键（来源ODS的id，溯源用）",
+    `record_id`           VARCHAR(64)     COMMENT "飞书记录唯一ID（溯源用）",
     -- 3. 度量列（金额/比值保留6位小数）
-    `otb_amount_yi`       DECIMAL(18,6)   COMMENT 'OTB金额（单位：亿，原decimal字段，如2.000000）',
-    `order_amount_ratio`  DECIMAL(18,6)   COMMENT '订货金额占比（比值保留6位小数）',
-    `order_tag_price`     DECIMAL(18,6)   COMMENT '订货牌价（varchar转DECIMAL(18,6)，金额）',
-    `otb_raw`             DECIMAL(18,6)   COMMENT 'OTB原始值（varchar转DECIMAL(18,6)，如7.02，与otb_amount_yi语义不同）',
+    `otb_amount_yi`       DECIMAL(18,6)   COMMENT "OTB金额（单位：亿，原decimal字段，如2.000000）",
+    `order_amount_ratio`  DECIMAL(18,6)   COMMENT "订货金额占比（比值保留6位小数）",
+    `order_tag_price`     DECIMAL(18,6)   COMMENT "订货牌价（varchar转DECIMAL(18,6)，金额）",
+    `otb_raw`             DECIMAL(18,6)   COMMENT "OTB原始值（varchar转DECIMAL(18,6)，如7.02，与otb_amount_yi语义不同）",
     -- 4. 技术字段
-    `sync_time`           DATETIME        COMMENT 'ODS同步时间',
-    `insert_date`         DATETIME        COMMENT 'DWD记录插入时间（ETL写入，增量更新用）',
-    `update_date`         DATETIME        COMMENT 'DWD记录更新时间（ETL写入，增量更新用）'
+    `sync_time`           DATETIME        COMMENT "ODS同步时间",
+    `insert_date`         DATETIME        COMMENT "DWD记录插入时间(ETL写入)",
+    `update_date`         DATETIME        COMMENT "DWD记录更新时间(ETL写入)"
 ) ENGINE=OLAP
 PRIMARY KEY(`ip`, `year`)
-COMMENT 'DWD层-OTB订货计划清洗表（IP+年度粒度，全字段保留，日刷新）'
-DISTRIBUTED BY HASH(`ip`) BUCKETS 4
+COMMENT "DWD层-OTB订货计划清洗表(IP+年度粒度,全字段保留,日刷新)"
+DISTRIBUTED BY HASH(`ip`)
 PROPERTIES (
-    "replication_num" = "1",
     "compression" = "LZ4",
-    "enable_persistent_index" = "true",
+    "enable_persistent_index" = "true", -- PK模型专属优化，开启
     "fast_schema_evolution" = "true",
     "replicated_storage" = "true",
-    "in_memory" = "false",
-    "storage_format" = "DEFAULT"
+    "replication_num" = "1"
 );
 
-INSERT INTO feishu_dwd.dwd_feishu_otb_d (
+
+INSERT INTO feishu_dwd.dwd_feishu_otb_wd_d (
     ip, year, id, record_id,
     otb_amount_yi, order_amount_ratio, order_tag_price, otb_raw,
     sync_time, insert_date, update_date
 )
 SELECT
-    IP,
-    年度 AS year,
-    id,
-    record_id,
-    CAST(`OTB（单位：亿）` AS DECIMAL(18,6)),            -- decimal转DECIMAL(18,6)，单位：亿（如2.000000）
-    CAST(订货金额占比 AS DECIMAL(18,6)),                 -- decimal转DECIMAL(18,6)，比值（如0.019400）
-    CAST(订货牌价 AS DECIMAL(18,6)),                     -- varchar转DECIMAL(18,6)，金额（如7129800）
-    CAST(OTB AS DECIMAL(18,6)),                          -- varchar转DECIMAL(18,6)，原始值（如7.02，与otb_amount_yi语义不同）
-    sync_time,
-    NOW() AS insert_date,                                -- ETL写入插入时间
-    NOW() AS update_date                                 -- ETL写入更新时间
-FROM wd_otb
-WHERE record_id IS NOT NULL
-  AND IP IS NOT NULL
-  AND 年度 IS NOT NULL;
+    COALESCE(NULLIF(TRIM(otb.IP), ''), 'None')                              AS ip,
+    COALESCE(NULLIF(TRIM(otb.年度), ''), 'None')                            AS year,
+    COALESCE(otb.id, 0)                                                     AS id,
+    COALESCE(NULLIF(TRIM(otb.record_id), ''), 'None')                       AS record_id,
+    COALESCE(CAST(NULLIF(TRIM(otb.`OTB（单位：亿）`), '') AS DECIMAL(18,6)), 0) AS otb_amount_yi,   -- decimal转DECIMAL(18,6)，单位：亿（如2.000000）
+    COALESCE(CAST(NULLIF(TRIM(otb.订货金额占比), '') AS DECIMAL(18,6)), 0)  AS order_amount_ratio,-- decimal转DECIMAL(18,6)，比值（如0.019400）
+    COALESCE(CAST(NULLIF(TRIM(otb.订货牌价), '') AS DECIMAL(18,6)), 0)      AS order_tag_price,   -- varchar转DECIMAL(18,6)，金额（如7129800）
+    COALESCE(CAST(NULLIF(TRIM(otb.OTB), '') AS DECIMAL(18,6)), 0)           AS otb_raw,           -- varchar转DECIMAL(18,6)，原始值（如7.02，与otb_amount_yi语义不同）
+    COALESCE(otb.sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))        AS sync_time,
+    NOW()                                                                   AS insert_date,       -- ETL写入插入时间
+    NOW()                                                                   AS update_date        -- ETL写入更新时间
+FROM feishu.wd_otb otb
+WHERE otb.record_id IS NOT NULL
+  AND otb.IP IS NOT NULL
+  AND otb.年度 IS NOT NULL;
+
 -- 注：OTB（单位：亿）与OTB是两个不同字段，前者为规范化金额（亿），后者为原始值，均保留
 ```
 
