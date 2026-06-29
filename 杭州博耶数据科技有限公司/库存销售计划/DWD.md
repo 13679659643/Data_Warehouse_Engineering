@@ -41,7 +41,7 @@
 │  └────────────────────────────┘ └────────────────────────────┘ └────────────────────────────┘ │
 │  ┌────────────────────────────┐ ┌────────────────────────────┐                                │
 │  │ feishu_dwd.                │ │ feishu_dwd.                │                                │
-│  │ dwd_feishu_inventory_d     │ │ dwd_feishu_otb_d           │                                │
+│  │ dwd_feishu_inventory_wdpinpai_d     │ │ dwd_feishu_otb_wd_d           │                                │
 │  │ 品牌方库存(日刷新)         │ │ OTB订货计划(日刷新)        │                                │
 │  └────────────────────────────┘ └────────────────────────────┘                                │
 └─────────────────────────────────────────────────────────────────────────┘
@@ -65,8 +65,8 @@
 | `feishu_dwd.dwd_feishu_product_wd_d` | 韦德商品库清洗表 | SKU | wd_shop | ~5万行 |
 | `feishu_dwd.dwd_feishu_product_361_d` | 361商品库清洗表 | SKU | t_361_shop | ~5万行 |
 | `feishu_dwd.dwd_feishu_product_all_d` | 统一商品库表 | SKU | feishu_dwd.dwd_feishu_product_wd_d + feishu_dwd.dwd_feishu_product_361_d | ~10万行 |
-| `feishu_dwd.dwd_feishu_inventory_d` | 品牌方库存清洗表 | SKU+更新日期 | wd_pinpaikucun | ~10万行 |
-| `feishu_dwd.dwd_feishu_otb_d` | OTB订货计划清洗表 | IP+年度 | wd_otb | ~1千行 |
+| `feishu_dwd.dwd_feishu_inventory_wdpinpai_d` | 品牌方库存清洗表 | SKU+更新日期 | wd_pinpaikucun | ~10万行 |
+| `feishu_dwd.dwd_feishu_otb_wd_d` | OTB订货计划清洗表 | IP+年度 | wd_otb | ~1千行 |
 
 > **命名规范**：`feishu_dwd.dwd_<数据源>_<业务域>_<品牌/范围>_<刷新周期>`
 > - Schema：feishu_dwd（DWD层统一Schema）
@@ -1968,7 +1968,7 @@ WHERE sku IS NOT NULL;
 
 ```sql
 -- ============================================================
--- DWD-7: feishu_dwd.dwd_feishu_inventory_d  品牌方库存清洗表（日刷新）
+-- DWD-7: feishu_dwd.dwd_feishu_inventory_wdpinpai_d  品牌方库存清洗表（日刷新）
 -- 来源：wd_pinpaikucun（24字段）
 -- 粒度：SKU + 库存更新日期
 -- 说明：清洗韦德品牌方库存，订货/已提/未提数量从varchar转整数
@@ -2080,7 +2080,7 @@ WHERE inv.sku IS NOT NULL AND TRIM(inv.sku) <> '';
 
 ```sql
 -- ============================================================
--- DWD-8: feishu_dwd.dwd_feishu_otb_d  OTB订货计划清洗表（日刷新）
+-- DWD-8: feishu_dwd.dwd_feishu_otb_wd_d  OTB订货计划清洗表（日刷新）
 -- 来源：wd_otb（9字段）
 -- 粒度：IP + 年度（主键）
 -- 说明：清洗OTB订货计划，仅做数据类型清洗，不删除字段
@@ -2276,8 +2276,8 @@ FROM feishu_dwd.dwd_feishu_sales_wd_d;
 
 - `feishu_dwd.dwd_feishu_sales_all_d`（长表）→ DWS层按 SKC/日期/渠道 聚合
 - `feishu_dwd.dwd_feishu_product_all_d` → DWS层关联销售数据计算上架天数、生命周期
-- `feishu_dwd.dwd_feishu_inventory_d` → DWS层计算可售周期、库存周转
-- `feishu_dwd.dwd_feishu_otb_d` → DWS/ADS层关联OTB计划与实际订货
+- `feishu_dwd.dwd_feishu_inventory_wdpinpai_d` → DWS层计算可售周期、库存周转
+- `feishu_dwd.dwd_feishu_otb_wd_d` → DWS/ADS层关联OTB计划与实际订货
 
 > **下一步**：待DWD层方案确认并实施后，再设计DWS层（SKC日销售汇总、累计指标、生命周期标签、180天销售计划）。
 
