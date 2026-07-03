@@ -380,801 +380,642 @@ FROM feishu.t_361sales_50 WHERE record_id IS NOT NULL;
 > 同 DWD-1，提供物化表与视图两种方案。视图方案将50张分表结构对齐后 UNION ALL，查询时实时合并；物化表方案落地存储，适合下游高频分析。两种方案并存。
 
 ```sql
--- ============================================================
--- DWD-2: feishu_dwd.dwd_feishu_sales_wd_d  韦德品牌销售日明细表（日刷新）
--- 来源：wd_sales_01 ~ wd_sales_50（50张分表，结构不一致）
--- 粒度：品牌 + SKU + 销售日期（宽表形态，每渠道一列）
--- 难点：wd_sales分表结构差异：
---   - wd_sales_06: 55字段（最全，含款号/尺码/销售指标等）
---   - wd_sales_23: 47字段（少8个销售指标，实际销量为varchar）
---   - wd_sales_30/50: 41字段（精简版，仅SKU+日期+36渠道字段）
--- 解决：以wd_sales_06为超集基准，缺失字段补NULL，统一类型
--- 引擎：StarRocks OLAP，PRIMARY KEY 模型，按 sales_date 动态分区
--- 主键：record_id(飞书唯一ID,全局唯一) + sales_date(分区键)
---
--- 【与ODS层字段差异说明】
--- 1. 新增字段：
---    - brand（品牌）：ODS无，DWD统一标记 '韦德'
---    - source_table（来源分表名）：数据溯源用
---    - insert_date（插入时间）：ETL写入，用于增量更新
---    - update_date（更新时间）：ETL写入，用于增量更新
--- 2. 去除字段：无（以wd_sales_06为超集基准，其他分表缺失字段补NULL保留）
--- 3. 字段重命名：中文 → 英文snake_case（如 `韦德之道-销量` → qty_wd）
--- 4. 类型转换：
---    - 销量字段：varchar/decimal → BIGINT（数量为整数）
---    - 金额/总和字段：varchar/decimal → DECIMAL(18,6)（金额保留6位小数）
---    - 销售日期/首次销售日期：datetime → DATE
--- 5. 字段数变化：以wd_sales_06(55字段)为基准 → DWD 62字段（新增brand/source_table/insert_date/update_date，去除id重复）
--- ============================================================
+        -- ============================================================
+        -- 方案一：物化表（feishu_dwd.dwd_feishu_sales_wd_d）
+        -- 落地存储，查询性能好，适合下游高频分析与DWS层加工
+        -- ============================================================
+        DROP TABLE IF EXISTS feishu_dwd.dwd_feishu_sales_wd_d;
+        CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_sales_wd_d (
+            -- 1. Key 列（前 N 列，顺序与 DUPLICATE KEY 一致）
+            `record_id`           VARCHAR(64)     COMMENT "飞书记录唯一ID(主键,去重依据)",
+            `sales_date`          DATE            COMMENT "销售日期(主键,分区键)",
+            `id`                  BIGINT          COMMENT "自增主键(来源ODS的id,溯源用)",
+            `brand`               VARCHAR(20)     COMMENT "品牌:韦德(DWD新增字段)",
+            `sku`                 VARCHAR(64)     COMMENT "SKU编码",
+            -- 2. 维度列
+            `style_no`            VARCHAR(64)     COMMENT "款号(存在None)",
+            `size`                VARCHAR(20)     COMMENT "尺码(存在None)",
+            `first_sales_date`    DATE            COMMENT "首次销售日期(空值为1970-01-01)",
+            `natural_week`        VARCHAR(20)     COMMENT "自然周",
+            `sales_week`          VARCHAR(20)     COMMENT "销售周期所属周(存在None)",
+            -- 3. 度量列：销售指标（仅wd_sales_06完整有，其他分表补NULL）
+            `order_replenish_1`   BIGINT          COMMENT "订货+补货1",
+            `order_replenish`     BIGINT          COMMENT "订货+补货数量",
+            `order_qty`           BIGINT          COMMENT "订货数量",
+            `actual_total_qty`    BIGINT          COMMENT "实际总销量",
+            `est_cycle_days`      BIGINT          COMMENT "预计销售周期天数",
+            `est_week_qty`        BIGINT          COMMENT "预计周销量",
+            `est_qty`             BIGINT          COMMENT "预计销量",
+            `actual_week_qty`     BIGINT          COMMENT "实际周销量",
+            `actual_qty`          BIGINT          COMMENT "实际销量",
+            `achievement_rate`    VARCHAR(50)     COMMENT "达成率",
+            `alert`               VARCHAR(50)     COMMENT "预警",
+            -- 4. 度量列：18个渠道的销量（整数类型）
+            `qty_wd`              BIGINT          COMMENT "韦德之道-销量",
+            `qty_wd_sample`       BIGINT          COMMENT "韦德之道寄样-销量",
+            `qty_dewu`            BIGINT          COMMENT "得物APP_韦德-销量",
+            `qty_dewu_consign`    BIGINT          COMMENT "韦德之道-得物寄售-销量",
+            `qty_95fen`           BIGINT          COMMENT "得物APP转寄_95分-销量",
+            `qty_guangdong`       BIGINT          COMMENT "广东炫动商贸(李宁客户)-销量",
+            `qty_quanyong`        BIGINT          COMMENT "全勇分销-销量",
+            `qty_yingkedi`        BIGINT          COMMENT "应科迪_客户-销量",
+            `qty_offline`         BIGINT          COMMENT "韦德线下店铺-销量",
+            `qty_japan`           BIGINT          COMMENT "韦德日本站-销量",
+            `qty_spanish`         BIGINT          COMMENT "韦德西语站-销量",
+            `qty_weihong`         BIGINT          COMMENT "dw_韦德伟宏店-销量",
+            `qty_95fen_shop`      BIGINT          COMMENT "韦德_95分店-销量",
+            `qty_pdd`             BIGINT          COMMENT "拼多多_博耶运动户外专营店-销量",
+            `qty_ebay`            BIGINT          COMMENT "eBay-销量",
+            `qty_entertainment`   BIGINT          COMMENT "韦德之道--招待费-销量",
+            `qty_germany`         BIGINT          COMMENT "韦德德国站-销量",
+            `qty_b2b`             BIGINT          COMMENT "韦德之道B2B-销量",
+            -- 5. 度量列：18个渠道的金额（保留6位小数）
+            `amt_wd`              DECIMAL(18,6)   COMMENT "韦德之道-金额",
+            `amt_wd_sample`       DECIMAL(18,6)   COMMENT "韦德之道寄样-金额",
+            `amt_dewu`            DECIMAL(18,6)   COMMENT "得物APP_韦德-金额",
+            `amt_dewu_consign`    DECIMAL(18,6)   COMMENT "韦德之道-得物寄售-金额",
+            `amt_95fen`           DECIMAL(18,6)   COMMENT "得物APP转寄_95分-金额",
+            `amt_guangdong`       DECIMAL(18,6)   COMMENT "广东炫动商贸(李宁客户)-金额",
+            `amt_quanyong`        DECIMAL(18,6)   COMMENT "全勇分销-金额",
+            `amt_yingkedi`        DECIMAL(18,6)   COMMENT "应科迪_客户-金额",
+            `amt_offline`         DECIMAL(18,6)   COMMENT "韦德线下店铺-金额",
+            `amt_japan`           DECIMAL(18,6)   COMMENT "韦德日本站-金额",
+            `amt_spanish`         DECIMAL(18,6)   COMMENT "韦德西语站-金额",
+            `amt_weihong`         DECIMAL(18,6)   COMMENT "dw_韦德伟宏店-金额",
+            `amt_95fen_shop`      DECIMAL(18,6)   COMMENT "韦德_95分店-金额",
+            `amt_pdd`             DECIMAL(18,6)   COMMENT "拼多多_博耶运动户外专营店-金额",
+            `amt_ebay`            DECIMAL(18,6)   COMMENT "eBay-金额",
+            `amt_entertainment`   DECIMAL(18,6)   COMMENT "韦德之道--招待费-金额",
+            `amt_germany`         DECIMAL(18,6)   COMMENT "韦德德国站-金额",
+            `amt_b2b`             DECIMAL(18,6)   COMMENT "韦德之道B2B-金额",
+            -- 6. 度量列：汇总字段（金额保留6位小数）
+            `total_sum`           DECIMAL(18,6)   COMMENT "总和",
+            `total_sum_copy`      DECIMAL(18,6)   COMMENT "总和副本",
+            -- 7. 技术字段
+            `sync_time`           DATETIME        COMMENT "ODS同步时间",
+            `source_table`        VARCHAR(20)     COMMENT "来源分表名(数据溯源,DWD新增)",
+            `insert_date`         DATETIME        COMMENT "DWD记录插入时间(ETL写入)",
+            `update_date`         DATETIME        COMMENT "DWD记录更新时间(ETL写入)"
+        ) ENGINE=OLAP
+        PRIMARY KEY(`record_id`, `sales_date`)
+        COMMENT "DWD层-韦德品牌销售日明细表(50张分表合并,结构对齐,日刷新)"
+        DISTRIBUTED BY HASH(`record_id`)
+        PROPERTIES (
+            "compression" = "LZ4",
+            "enable_persistent_index" = "true", -- PK模型专属优化，开启
+            "fast_schema_evolution" = "true",
+            "replicated_storage" = "true",
+            "replication_num" = "1"
+        );
 
--- ============================================================
--- 方案一：物化表（feishu_dwd.dwd_feishu_sales_wd_d）
--- 落地存储，查询性能好，适合下游高频分析与DWS层加工
--- ============================================================
-DROP TABLE IF EXISTS feishu_dwd.dwd_feishu_sales_wd_d;
-CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_sales_wd_d (
-    -- 1. Key 列（前 N 列，顺序与 PRIMARY KEY 一致）
-    `record_id`           VARCHAR(64)     COMMENT "飞书记录唯一ID(主键,去重依据)",
-    `sales_date`          DATE            COMMENT "销售日期(主键,分区键)",
-    `id`                  BIGINT          COMMENT "自增主键(来源ODS的id,溯源用)",
-    `brand`               VARCHAR(20)     COMMENT "品牌:韦德(DWD新增字段)",
-    `sku`                 VARCHAR(64)     COMMENT "SKU编码",
-    -- 2. 维度列
-    `style_no`            VARCHAR(64)     COMMENT "款号(仅06/23有，其余为None)",
-    `size`                VARCHAR(20)     COMMENT "尺码(仅06/23有，其余为None)",
-    `first_sales_date`    DATE            COMMENT "首次销售日期(仅06/23有，其余为1970-01-01)",
-    `sales_week`          VARCHAR(20)     COMMENT "销售周期所属周(仅06/23有，其余为None)",
-    -- 3. 度量列：销售指标（仅wd_sales_06完整有，其他分表补NULL）
-    `order_replenish_1`   BIGINT          COMMENT "订货+补货1(仅06有)",
-    `order_replenish`     BIGINT          COMMENT "订货+补货(仅06有)",
-    `actual_total_qty`    BIGINT          COMMENT "实际总销量(仅06有)",
-    `est_cycle_days`      BIGINT          COMMENT "预计销售周期天数(仅06有)",
-    `est_week_qty`        BIGINT          COMMENT "预计周销量(仅06有)",
-    `est_qty`             BIGINT          COMMENT "预计销量(仅06有)",
-    `actual_week_qty`     BIGINT          COMMENT "实际周销量(仅06有)",
-    `actual_qty`          BIGINT          COMMENT "实际销量(06为decimal,23为varchar,30/50无)",
-    -- 4. 度量列：18个渠道的销量（整数类型）
-    `qty_wd`              BIGINT          COMMENT "韦德之道-销量",
-    `qty_wd_sample`       BIGINT          COMMENT "韦德之道寄样-销量",
-    `qty_dewu`            BIGINT          COMMENT "得物APP_韦德-销量",
-    `qty_dewu_consign`    BIGINT          COMMENT "韦德之道-得物寄售-销量",
-    `qty_95fen`           BIGINT          COMMENT "得物APP转寄_95分-销量",
-    `qty_guangdong`       BIGINT          COMMENT "广东炫动商贸(李宁客户)-销量",
-    `qty_quanyong`        BIGINT          COMMENT "全勇分销-销量",
-    `qty_yingkedi`        BIGINT          COMMENT "应科迪_客户-销量",
-    `qty_offline`         BIGINT          COMMENT "韦德线下店铺-销量",
-    `qty_japan`           BIGINT          COMMENT "韦德日本站-销量",
-    `qty_spanish`         BIGINT          COMMENT "韦德西语站-销量",
-    `qty_weihong`         BIGINT          COMMENT "dw_韦德伟宏店-销量",
-    `qty_95fen_shop`      BIGINT          COMMENT "韦德_95分店-销量",
-    `qty_pdd`             BIGINT          COMMENT "拼多多_博耶运动户外专营店-销量",
-    `qty_ebay`            BIGINT          COMMENT "eBay-销量",
-    `qty_entertainment`   BIGINT          COMMENT "韦德之道--招待费-销量",
-    `qty_germany`         BIGINT          COMMENT "韦德德国站-销量",
-    `qty_b2b`             BIGINT          COMMENT "韦德之道B2B-销量",
-    -- 5. 度量列：18个渠道的金额（保留6位小数）
-    `amt_wd`              DECIMAL(18,6)   COMMENT "韦德之道-金额",
-    `amt_wd_sample`       DECIMAL(18,6)   COMMENT "韦德之道寄样-金额",
-    `amt_dewu`            DECIMAL(18,6)   COMMENT "得物APP_韦德-金额",
-    `amt_dewu_consign`    DECIMAL(18,6)   COMMENT "韦德之道-得物寄售-金额",
-    `amt_95fen`           DECIMAL(18,6)   COMMENT "得物APP转寄_95分-金额",
-    `amt_guangdong`       DECIMAL(18,6)   COMMENT "广东炫动商贸(李宁客户)-金额",
-    `amt_quanyong`        DECIMAL(18,6)   COMMENT "全勇分销-金额",
-    `amt_yingkedi`        DECIMAL(18,6)   COMMENT "应科迪_客户-金额",
-    `amt_offline`         DECIMAL(18,6)   COMMENT "韦德线下店铺-金额",
-    `amt_japan`           DECIMAL(18,6)   COMMENT "韦德日本站-金额",
-    `amt_spanish`         DECIMAL(18,6)   COMMENT "韦德西语站-金额",
-    `amt_weihong`         DECIMAL(18,6)   COMMENT "dw_韦德伟宏店-金额",
-    `amt_95fen_shop`      DECIMAL(18,6)   COMMENT "韦德_95分店-金额",
-    `amt_pdd`             DECIMAL(18,6)   COMMENT "拼多多_博耶运动户外专营店-金额",
-    `amt_ebay`            DECIMAL(18,6)   COMMENT "eBay-金额",
-    `amt_entertainment`   DECIMAL(18,6)   COMMENT "韦德之道--招待费-金额",
-    `amt_germany`         DECIMAL(18,6)   COMMENT "韦德德国站-金额",
-    `amt_b2b`             DECIMAL(18,6)   COMMENT "韦德之道B2B-金额",
-    -- 6. 度量列：汇总字段（金额保留6位小数）
-    `total_sum`           DECIMAL(18,6)   COMMENT "总和",
-    `total_sum_copy`      DECIMAL(18,6)   COMMENT "总和副本(仅06有)",
-    -- 7. 技术字段
-    `sync_time`           DATETIME        COMMENT "ODS同步时间",
-    `source_table`        VARCHAR(20)     COMMENT "来源分表名(数据溯源,DWD新增)",
-    `insert_date`         DATETIME        COMMENT "DWD记录插入时间(ETL写入)",
-    `update_date`         DATETIME        COMMENT "DWD记录更新时间(ETL写入)"
-) ENGINE=OLAP
-PRIMARY KEY(`record_id`, `sales_date`)
-COMMENT "DWD层-韦德品牌销售日明细表(50张分表合并,结构对齐,日刷新)"
-DISTRIBUTED BY HASH(`record_id`)
-PROPERTIES (
-    "compression" = "LZ4",
-    "enable_persistent_index" = "true", -- PK模型专属优化，开启
-    "fast_schema_evolution" = "true",
-    "replicated_storage" = "true",
-    "replication_num" = "1"
-);
+	-- ============================================================
+	-- 合并50张分表：以feishu.wd_sales_01结构为准。
+	-- 字段命名用``符号包裹：`销售日期`、`款号`
+  -- 遗漏了4个字段：你在头部注释提到了需补充 natural_week（自然周）、order_qty（订货数量）、achievement_rate（达成率）、alert（预警），但在 INSERT 字段列 表和 SELECT 中均未实际添加。
+  -- 源表字段映射错位修正：原SQL中，你将源表的 订货+补货数量 映射给了 order_replenish_1，将 订货数量 映射给了 order_replenish。根据建表语句的注释，正确的对应关系应为：订货+补货1 -> order_replenish_1，订货+补货数量 -> order_replenish，订货数量 -> order_qty。已一并修正。
+  -- 插入了 63 个字段，与建表字段完全对齐
+	-- ============================================================
+  TRUNCATE TABLE feishu_dwd.dwd_feishu_sales_wd_d;
+	INSERT INTO feishu_dwd.dwd_feishu_sales_wd_d (
+	    id, record_id, brand, sku, sales_date, style_no, size, first_sales_date, natural_week, sales_week,
+	    order_replenish_1, order_replenish, order_qty, actual_total_qty, est_cycle_days, est_week_qty,
+	    est_qty, actual_week_qty, actual_qty, achievement_rate, alert,
+	    qty_wd, qty_wd_sample, qty_dewu, qty_dewu_consign, qty_95fen, qty_guangdong,
+	    qty_quanyong, qty_yingkedi, qty_offline, qty_japan, qty_spanish, qty_weihong,
+	    qty_95fen_shop, qty_pdd, qty_ebay, qty_entertainment, qty_germany, qty_b2b,
+	    amt_wd, amt_wd_sample, amt_dewu, amt_dewu_consign, amt_95fen, amt_guangdong,
+	    amt_quanyong, amt_yingkedi, amt_offline, amt_japan, amt_spanish, amt_weihong,
+	    amt_95fen_shop, amt_pdd, amt_ebay, amt_entertainment, amt_germany, amt_b2b,
+	    total_sum, total_sum_copy, sync_time, source_table, insert_date, update_date
+	)
+	SELECT
+	    id                                                                              AS id,
+	    -- 字符串类型 (varchar)：保留 TRIM 和 NULLIF
+	    COALESCE(NULLIF(TRIM(record_id), ''), 'None')                                   AS record_id,
+	    '韦德'                                                                           AS brand,
+	    COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                         AS sku,
+	    -- 日期时间类型 (datetime)：场景一，去除 TRIM 和 NULLIF
+	    COALESCE(DATE(销售日期), DATE('1970-01-01'))                                    AS sales_date,
+	    COALESCE(NULLIF(TRIM(款号), ''), 'None')                                        AS style_no,
+	    COALESCE(NULLIF(TRIM(尺码), ''), 'None')                                        AS size,
+	    -- 日期时间类型 (datetime)：场景一，去除 TRIM 和 NULLIF
+	    COALESCE(DATE(首次销售日期), DATE('1970-01-01'))                                AS first_sales_date,
+	    -- 补充遗漏字段：自然周 (需补充在维度列中)
+	    COALESCE(NULLIF(TRIM(自然周), ''), 'None')                                      AS natural_week,
+	    COALESCE(NULLIF(TRIM(销售周期所属周), ''), 'None')                              AS sales_week,
+	    -- ================= 销售指标 =================
+	    -- VARCHAR 转 BIGINT：场景二，先转 DECIMAL 再 ROUND 转 BIGINT，防止源数据带小数报错
+	    -- 修正映射：订货+补货1 -> order_replenish_1
+	    COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货1`), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS order_replenish_1,
+	    -- 修正映射：订货+补货数量 -> order_replenish
+	    COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货数量`), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS order_replenish,
+	    -- 补充遗漏字段：订货数量 (需补充在销售指标度量列中)
+	    COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货数量`), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS order_qty,
+	    COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际总销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0)      AS actual_total_qty,
+	    COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计销售周期天数), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS est_cycle_days,
+	    COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计周销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0)      AS est_week_qty,
+	    -- DECIMAL 转 BIGINT：场景一，直接 ROUND 转 BIGINT，去除 TRIM 和 NULLIF
+	    COALESCE(CAST(ROUND(`预计销量`, 0) AS BIGINT), 0)                               AS est_qty,
+	    -- VARCHAR 转 BIGINT：场景二
+	    COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际周销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0)      AS actual_week_qty,
+	    -- DECIMAL 转 BIGINT：场景一
+	    COALESCE(CAST(ROUND(`实际销量`, 0) AS BIGINT), 0)                               AS actual_qty,
+	    -- 补充遗漏字段：达成率、预警 (需补充在销售指标度量列中)
+	    COALESCE(NULLIF(TRIM(`达成率`), ''), 'None')                                   AS achievement_rate,
+	    COALESCE(NULLIF(TRIM(`预警`), ''), 'None')                                     AS alert,
+	    -- ================= 18个渠道销量 =================
+	    -- DECIMAL 转 BIGINT：场景一，直接 ROUND 转 BIGINT，去除 TRIM 和 NULLIF
+	    COALESCE(CAST(ROUND(`韦德之道-销量`, 0) AS BIGINT), 0)                          AS qty_wd,
+	    COALESCE(CAST(ROUND(`韦德之道寄样-销量`, 0) AS BIGINT), 0)                      AS qty_wd_sample,
+	    COALESCE(CAST(ROUND(`得物APP_韦德-销量`, 0) AS BIGINT), 0)                      AS qty_dewu,
+	    COALESCE(CAST(ROUND(`韦德之道-得物寄售-销量`, 0) AS BIGINT), 0)                 AS qty_dewu_consign,
+	    COALESCE(CAST(ROUND(`得物APP转寄_95分-销量`, 0) AS BIGINT), 0)                  AS qty_95fen,
+	    COALESCE(CAST(ROUND(`广东炫动商贸有限公司(李宁客户)-销量`, 0) AS BIGINT), 0)    AS qty_guangdong,
+	    COALESCE(CAST(ROUND(`全勇分销-销量`, 0) AS BIGINT), 0)                          AS qty_quanyong,
+	    COALESCE(CAST(ROUND(`应科迪_客户-销量`, 0) AS BIGINT), 0)                       AS qty_yingkedi,
+	    COALESCE(CAST(ROUND(`韦德线下店铺-销量`, 0) AS BIGINT), 0)                      AS qty_offline,
+	    COALESCE(CAST(ROUND(`韦德日本站-销量`, 0) AS BIGINT), 0)                        AS qty_japan,
+	    COALESCE(CAST(ROUND(`韦德西语站-销量`, 0) AS BIGINT), 0)                        AS qty_spanish,
+	    COALESCE(CAST(ROUND(`dw_韦德伟宏店-销量`, 0) AS BIGINT), 0)                     AS qty_weihong,
+	    COALESCE(CAST(ROUND(`韦德_95分店-销量`, 0) AS BIGINT), 0)                       AS qty_95fen_shop,
+	    COALESCE(CAST(ROUND(`拼多多_博耶运动户外专营店-销量`, 0) AS BIGINT), 0)         AS qty_pdd,
+	    COALESCE(CAST(ROUND(`eBay-销量`, 0) AS BIGINT), 0)                              AS qty_ebay,
+	    COALESCE(CAST(ROUND(`韦德之道--招待费-销量`, 0) AS BIGINT), 0)                  AS qty_entertainment,
+	    COALESCE(CAST(ROUND(`韦德德国站-销量`, 0) AS BIGINT), 0)                        AS qty_germany,
+	    COALESCE(CAST(ROUND(`韦德之道B2B-销量`, 0) AS BIGINT), 0)                       AS qty_b2b,
+	    -- ================= 18个渠道金额 =================
+	    -- DECIMAL 转 DECIMAL(18,6)：场景一，直接 CAST 控制精度，去除 TRIM 和 NULLIF
+	    COALESCE(CAST(`韦德之道-金额` AS DECIMAL(18,6)), 0)                             AS amt_wd,
+	    COALESCE(CAST(`韦德之道寄样-金额` AS DECIMAL(18,6)), 0)                         AS amt_wd_sample,
+	    COALESCE(CAST(`得物APP_韦德-金额` AS DECIMAL(18,6)), 0)                         AS amt_dewu,
+	    COALESCE(CAST(`韦德之道-得物寄售-金额` AS DECIMAL(18,6)), 0)                    AS amt_dewu_consign,
+	    COALESCE(CAST(`得物APP转寄_95分-金额` AS DECIMAL(18,6)), 0)                     AS amt_95fen,
+	    COALESCE(CAST(`广东炫动商贸有限公司(李宁客户)-金额` AS DECIMAL(18,6)), 0)       AS amt_guangdong,
+	    COALESCE(CAST(`全勇分销-金额` AS DECIMAL(18,6)), 0)                             AS amt_quanyong,
+	    COALESCE(CAST(`应科迪_客户-金额` AS DECIMAL(18,6)), 0)                          AS amt_yingkedi,
+	    COALESCE(CAST(`韦德线下店铺-金额` AS DECIMAL(18,6)), 0)                         AS amt_offline,
+	    COALESCE(CAST(`韦德日本站-金额` AS DECIMAL(18,6)), 0)                           AS amt_japan,
+	    COALESCE(CAST(`韦德西语站-金额` AS DECIMAL(18,6)), 0)                           AS amt_spanish,
+	    COALESCE(CAST(`dw_韦德伟宏店-金额` AS DECIMAL(18,6)), 0)                        AS amt_weihong,
+	    COALESCE(CAST(`韦德_95分店-金额` AS DECIMAL(18,6)), 0)                          AS amt_95fen_shop,
+	    COALESCE(CAST(`拼多多_博耶运动户外专营店-金额` AS DECIMAL(18,6)), 0)            AS amt_pdd,
+	    COALESCE(CAST(`eBay-金额` AS DECIMAL(18,6)), 0)                                 AS amt_ebay,
+	    COALESCE(CAST(`韦德之道--招待费-金额` AS DECIMAL(18,6)), 0)                     AS amt_entertainment,
+	    COALESCE(CAST(`韦德德国站-金额` AS DECIMAL(18,6)), 0)                           AS amt_germany,
+	    COALESCE(CAST(`韦德之道B2B-金额` AS DECIMAL(18,6)), 0)                          AS amt_b2b,
+	    -- ================= 汇总字段 =================
+	    -- VARCHAR 转 DECIMAL(18,6)：场景二，保留 TRIM 和 NULLIF，直接转 DECIMAL
+	    COALESCE(CAST(NULLIF(TRIM(`总和`), '') AS DECIMAL(18,6)), 0)                    AS total_sum,
+	    -- DECIMAL 转 DECIMAL(18,6)：场景一，直接 CAST，去除 TRIM 和 NULLIF
+	    COALESCE(CAST(`总和 副本` AS DECIMAL(18,6)), 0)                                 AS total_sum_copy,
+	    -- ================= 系统字段 =================
+	    -- 日期时间类型 (datetime)：场景一
+	    COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
+	    'wd_sales_01'                                                                   AS source_table,
+	    NOW()                                                                           AS insert_date,
+	    NOW()                                                                           AS update_date    
+	FROM feishu.wd_sales_01
+	WHERE record_id IS NOT NULL;
 
--- ============================================================
--- 合并50张分表：按结构差异分3类处理
--- 05: 和06一致
--- ============================================================
+        -- ============================================================
+        -- 方案二：视图（feishu_dwd.v_feishu_sales_wd_d）
+        -- 不落物化表，查询时实时UNION ALL 6张分表（结构完全对齐）
+        -- 适用：数据探查、低频查询、节省存储；不适合高频分析场景
+        -- ============================================================
+        DROP VIEW IF EXISTS feishu_dwd.v_feishu_sales_wd_d;
+        CREATE VIEW feishu_dwd.v_feishu_sales_wd_d AS
+        -- ==========================================
+        -- wd_sales_01
+        -- ==========================================
+        SELECT
+            id                                                                              AS id,
+            -- 字符串类型：保留 TRIM 和 NULLIF
+            COALESCE(NULLIF(TRIM(record_id), ''), 'None')                                   AS record_id,
+            '韦德'                                                                           AS brand,
+            COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                         AS sku,
+            -- 日期时间类型：去除 TRIM 和 NULLIF
+            COALESCE(DATE(销售日期), DATE('1970-01-01'))                                    AS sales_date,
+            COALESCE(NULLIF(TRIM(款号), ''), 'None')                                        AS style_no,
+            COALESCE(NULLIF(TRIM(尺码), ''), 'None')                                        AS size,
+            COALESCE(DATE(首次销售日期), DATE('1970-01-01'))                                AS first_sales_date,
+            COALESCE(NULLIF(TRIM(自然周), ''), 'None')                                      AS natural_week,
+            COALESCE(NULLIF(TRIM(销售周期所属周), ''), 'None')                              AS sales_week,
+            -- ================= 11个销售指标 =================
+            -- VARCHAR 转 BIGINT：先转 DECIMAL 再 ROUND 转 BIGINT
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货1`), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS order_replenish_1,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货数量`), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS order_replenish,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货数量`), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS order_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际总销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS actual_total_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计销售周期天数), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS est_cycle_days,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计周销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS est_week_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS est_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际周销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS actual_week_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS actual_qty,
+            COALESCE(NULLIF(TRIM(达成率), ''), 'None')                                      AS achievement_rate,
+            COALESCE(NULLIF(TRIM(预警), ''), 'None')                                        AS alert,
+            -- ================= 18个渠道销量 =================
+            -- DECIMAL 转 BIGINT：直接 ROUND 转 BIGINT
+            COALESCE(CAST(ROUND(`韦德之道-销量`, 0) AS BIGINT), 0)                          AS qty_wd,
+            COALESCE(CAST(ROUND(`韦德之道寄样-销量`, 0) AS BIGINT), 0)                      AS qty_wd_sample,
+            COALESCE(CAST(ROUND(`得物APP_韦德-销量`, 0) AS BIGINT), 0)                      AS qty_dewu,
+            COALESCE(CAST(ROUND(`韦德之道-得物寄售-销量`, 0) AS BIGINT), 0)                 AS qty_dewu_consign,
+            COALESCE(CAST(ROUND(`得物APP转寄_95分-销量`, 0) AS BIGINT), 0)                  AS qty_95fen,
+            COALESCE(CAST(ROUND(`广东炫动商贸有限公司(李宁客户)-销量`, 0) AS BIGINT), 0)    AS qty_guangdong,
+            COALESCE(CAST(ROUND(`全勇分销-销量`, 0) AS BIGINT), 0)                          AS qty_quanyong,
+            COALESCE(CAST(ROUND(`应科迪_客户-销量`, 0) AS BIGINT), 0)                       AS qty_yingkedi,
+            COALESCE(CAST(ROUND(`韦德线下店铺-销量`, 0) AS BIGINT), 0)                      AS qty_offline,
+            COALESCE(CAST(ROUND(`韦德日本站-销量`, 0) AS BIGINT), 0)                        AS qty_japan,
+            COALESCE(CAST(ROUND(`韦德西语站-销量`, 0) AS BIGINT), 0)                        AS qty_spanish,
+            COALESCE(CAST(ROUND(`dw_韦德伟宏店-销量`, 0) AS BIGINT), 0)                     AS qty_weihong,
+            COALESCE(CAST(ROUND(`韦德_95分店-销量`, 0) AS BIGINT), 0)                       AS qty_95fen_shop,
+            COALESCE(CAST(ROUND(`拼多多_博耶运动户外专营店-销量`, 0) AS BIGINT), 0)         AS qty_pdd,
+            COALESCE(CAST(ROUND(`eBay-销量`, 0) AS BIGINT), 0)                              AS qty_ebay,
+            COALESCE(CAST(ROUND(`韦德之道--招待费-销量`, 0) AS BIGINT), 0)                  AS qty_entertainment,
+            COALESCE(CAST(ROUND(`韦德德国站-销量`, 0) AS BIGINT), 0)                        AS qty_germany,
+            COALESCE(CAST(ROUND(`韦德之道B2B-销量`, 0) AS BIGINT), 0)                       AS qty_b2b,
+            -- ================= 18个渠道金额 =================
+            -- DECIMAL 转 DECIMAL(18,6)：直接 CAST 控制精度
+            COALESCE(CAST(`韦德之道-金额` AS DECIMAL(18,6)), 0)                             AS amt_wd,
+            COALESCE(CAST(`韦德之道寄样-金额` AS DECIMAL(18,6)), 0)                         AS amt_wd_sample,
+            COALESCE(CAST(`得物APP_韦德-金额` AS DECIMAL(18,6)), 0)                         AS amt_dewu,
+            COALESCE(CAST(`韦德之道-得物寄售-金额` AS DECIMAL(18,6)), 0)                    AS amt_dewu_consign,
+            COALESCE(CAST(`得物APP转寄_95分-金额` AS DECIMAL(18,6)), 0)                     AS amt_95fen,
+            COALESCE(CAST(`广东炫动商贸有限公司(李宁客户)-金额` AS DECIMAL(18,6)), 0)       AS amt_guangdong,
+            COALESCE(CAST(`全勇分销-金额` AS DECIMAL(18,6)), 0)                             AS amt_quanyong,
+            COALESCE(CAST(`应科迪_客户-金额` AS DECIMAL(18,6)), 0)                          AS amt_yingkedi,
+            COALESCE(CAST(`韦德线下店铺-金额` AS DECIMAL(18,6)), 0)                         AS amt_offline,
+            COALESCE(CAST(`韦德日本站-金额` AS DECIMAL(18,6)), 0)                           AS amt_japan,
+            COALESCE(CAST(`韦德西语站-金额` AS DECIMAL(18,6)), 0)                           AS amt_spanish,
+            COALESCE(CAST(`dw_韦德伟宏店-金额` AS DECIMAL(18,6)), 0)                        AS amt_weihong,
+            COALESCE(CAST(`韦德_95分店-金额` AS DECIMAL(18,6)), 0)                          AS amt_95fen_shop,
+            COALESCE(CAST(`拼多多_博耶运动户外专营店-金额` AS DECIMAL(18,6)), 0)            AS amt_pdd,
+            COALESCE(CAST(`eBay-金额` AS DECIMAL(18,6)), 0)                                 AS amt_ebay,
+            COALESCE(CAST(`韦德之道--招待费-金额` AS DECIMAL(18,6)), 0)                     AS amt_entertainment,
+            COALESCE(CAST(`韦德德国站-金额` AS DECIMAL(18,6)), 0)                           AS amt_germany,
+            COALESCE(CAST(`韦德之道B2B-金额` AS DECIMAL(18,6)), 0)                          AS amt_b2b,
+            -- ================= 汇总与系统字段 =================
+            -- VARCHAR 转 DECIMAL：保留 TRIM 和 NULLIF
+            COALESCE(CAST(NULLIF(TRIM(`总和`), '') AS DECIMAL(18,6)), 0)                    AS total_sum,
+            -- DECIMAL 转 DECIMAL：去除 TRIM 和 NULLIF
+            COALESCE(CAST(`总和 副本` AS DECIMAL(18,6)), 0)                                  AS total_sum_copy,
+            -- 日期时间类型：去除 TRIM 和 NULLIF
+            COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
+            'wd_sales_01'                                                                   AS source_table,
+            COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS insert_date,
+            COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS update_date
+        FROM feishu.wd_sales_01 
+        WHERE record_id IS NOT NULL
+        UNION ALL
+        -- ==========================================
+        -- wd_sales_02
+        -- ==========================================
+        SELECT
+            id                                                                              AS id,
+            COALESCE(NULLIF(TRIM(record_id), ''), 'None')                                   AS record_id,
+            '韦德'                                                                           AS brand,
+            COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                         AS sku,
+            COALESCE(DATE(销售日期), DATE('1970-01-01'))                                    AS sales_date,
+            COALESCE(NULLIF(TRIM(款号), ''), 'None')                                        AS style_no,
+            COALESCE(NULLIF(TRIM(尺码), ''), 'None')                                        AS size,
+            COALESCE(DATE(首次销售日期), DATE('1970-01-01'))                                AS first_sales_date,
+            COALESCE(NULLIF(TRIM(自然周), ''), 'None')                                      AS natural_week,
+            COALESCE(NULLIF(TRIM(销售周期所属周), ''), 'None')                              AS sales_week,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货1`), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS order_replenish_1,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货数量`), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS order_replenish,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货数量`), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS order_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际总销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS actual_total_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计销售周期天数), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS est_cycle_days,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计周销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS est_week_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS est_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际周销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS actual_week_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS actual_qty,
+            COALESCE(NULLIF(TRIM(达成率), ''), 'None')                                      AS achievement_rate,
+            COALESCE(NULLIF(TRIM(预警), ''), 'None')                                        AS alert,
+            COALESCE(CAST(ROUND(`韦德之道-销量`, 0) AS BIGINT), 0)                          AS qty_wd,
+            COALESCE(CAST(ROUND(`韦德之道寄样-销量`, 0) AS BIGINT), 0)                      AS qty_wd_sample,
+            COALESCE(CAST(ROUND(`得物APP_韦德-销量`, 0) AS BIGINT), 0)                      AS qty_dewu,
+            COALESCE(CAST(ROUND(`韦德之道-得物寄售-销量`, 0) AS BIGINT), 0)                 AS qty_dewu_consign,
+            COALESCE(CAST(ROUND(`得物APP转寄_95分-销量`, 0) AS BIGINT), 0)                  AS qty_95fen,
+            COALESCE(CAST(ROUND(`广东炫动商贸有限公司(李宁客户)-销量`, 0) AS BIGINT), 0)    AS qty_guangdong,
+            COALESCE(CAST(ROUND(`全勇分销-销量`, 0) AS BIGINT), 0)                          AS qty_quanyong,
+            COALESCE(CAST(ROUND(`应科迪_客户-销量`, 0) AS BIGINT), 0)                       AS qty_yingkedi,
+            COALESCE(CAST(ROUND(`韦德线下店铺-销量`, 0) AS BIGINT), 0)                      AS qty_offline,
+            COALESCE(CAST(ROUND(`韦德日本站-销量`, 0) AS BIGINT), 0)                        AS qty_japan,
+            COALESCE(CAST(ROUND(`韦德西语站-销量`, 0) AS BIGINT), 0)                        AS qty_spanish,
+            COALESCE(CAST(ROUND(`dw_韦德伟宏店-销量`, 0) AS BIGINT), 0)                     AS qty_weihong,
+            COALESCE(CAST(ROUND(`韦德_95分店-销量`, 0) AS BIGINT), 0)                       AS qty_95fen_shop,
+            COALESCE(CAST(ROUND(`拼多多_博耶运动户外专营店-销量`, 0) AS BIGINT), 0)         AS qty_pdd,
+            COALESCE(CAST(ROUND(`eBay-销量`, 0) AS BIGINT), 0)                              AS qty_ebay,
+            COALESCE(CAST(ROUND(`韦德之道--招待费-销量`, 0) AS BIGINT), 0)                  AS qty_entertainment,
+            COALESCE(CAST(ROUND(`韦德德国站-销量`, 0) AS BIGINT), 0)                        AS qty_germany,
+            COALESCE(CAST(ROUND(`韦德之道B2B-销量`, 0) AS BIGINT), 0)                       AS qty_b2b,
+            COALESCE(CAST(`韦德之道-金额` AS DECIMAL(18,6)), 0)                             AS amt_wd,
+            COALESCE(CAST(`韦德之道寄样-金额` AS DECIMAL(18,6)), 0)                         AS amt_wd_sample,
+            COALESCE(CAST(`得物APP_韦德-金额` AS DECIMAL(18,6)), 0)                         AS amt_dewu,
+            COALESCE(CAST(`韦德之道-得物寄售-金额` AS DECIMAL(18,6)), 0)                    AS amt_dewu_consign,
+            COALESCE(CAST(`得物APP转寄_95分-金额` AS DECIMAL(18,6)), 0)                     AS amt_95fen,
+            COALESCE(CAST(`广东炫动商贸有限公司(李宁客户)-金额` AS DECIMAL(18,6)), 0)       AS amt_guangdong,
+            COALESCE(CAST(`全勇分销-金额` AS DECIMAL(18,6)), 0)                             AS amt_quanyong,
+            COALESCE(CAST(`应科迪_客户-金额` AS DECIMAL(18,6)), 0)                          AS amt_yingkedi,
+            COALESCE(CAST(`韦德线下店铺-金额` AS DECIMAL(18,6)), 0)                         AS amt_offline,
+            COALESCE(CAST(`韦德日本站-金额` AS DECIMAL(18,6)), 0)                           AS amt_japan,
+            COALESCE(CAST(`韦德西语站-金额` AS DECIMAL(18,6)), 0)                           AS amt_spanish,
+            COALESCE(CAST(`dw_韦德伟宏店-金额` AS DECIMAL(18,6)), 0)                        AS amt_weihong,
+            COALESCE(CAST(`韦德_95分店-金额` AS DECIMAL(18,6)), 0)                          AS amt_95fen_shop,
+            COALESCE(CAST(`拼多多_博耶运动户外专营店-金额` AS DECIMAL(18,6)), 0)            AS amt_pdd,
+            COALESCE(CAST(`eBay-金额` AS DECIMAL(18,6)), 0)                                 AS amt_ebay,
+            COALESCE(CAST(`韦德之道--招待费-金额` AS DECIMAL(18,6)), 0)                     AS amt_entertainment,
+            COALESCE(CAST(`韦德德国站-金额` AS DECIMAL(18,6)), 0)                           AS amt_germany,
+            COALESCE(CAST(`韦德之道B2B-金额` AS DECIMAL(18,6)), 0)                          AS amt_b2b,
+            COALESCE(CAST(NULLIF(TRIM(`总和`), '') AS DECIMAL(18,6)), 0)                    AS total_sum,
+            COALESCE(CAST(`总和 副本` AS DECIMAL(18,6)), 0)                                  AS total_sum_copy,
+            COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
+            'wd_sales_02'                                                                   AS source_table,
+            COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS insert_date,
+            COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS update_date
+        FROM feishu.wd_sales_02 
+        WHERE record_id IS NOT NULL
+        UNION ALL
+        -- ==========================================
+        -- wd_sales_03
+        -- ==========================================
+        SELECT
+            id                                                                              AS id,
+            COALESCE(NULLIF(TRIM(record_id), ''), 'None')                                   AS record_id,
+            '韦德'                                                                           AS brand,
+            COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                         AS sku,
+            COALESCE(DATE(销售日期), DATE('1970-01-01'))                                    AS sales_date,
+            COALESCE(NULLIF(TRIM(款号), ''), 'None')                                        AS style_no,
+            COALESCE(NULLIF(TRIM(尺码), ''), 'None')                                        AS size,
+            COALESCE(DATE(首次销售日期), DATE('1970-01-01'))                                AS first_sales_date,
+            COALESCE(NULLIF(TRIM(自然周), ''), 'None')                                      AS natural_week,
+            COALESCE(NULLIF(TRIM(销售周期所属周), ''), 'None')                              AS sales_week,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货1`), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS order_replenish_1,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货数量`), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS order_replenish,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货数量`), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS order_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际总销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS actual_total_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计销售周期天数), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS est_cycle_days,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计周销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS est_week_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS est_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际周销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS actual_week_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS actual_qty,
+            COALESCE(NULLIF(TRIM(达成率), ''), 'None')                                      AS achievement_rate,
+            COALESCE(NULLIF(TRIM(预警), ''), 'None')                                        AS alert,
+            COALESCE(CAST(ROUND(`韦德之道-销量`, 0) AS BIGINT), 0)                          AS qty_wd,
+            COALESCE(CAST(ROUND(`韦德之道寄样-销量`, 0) AS BIGINT), 0)                      AS qty_wd_sample,
+            COALESCE(CAST(ROUND(`得物APP_韦德-销量`, 0) AS BIGINT), 0)                      AS qty_dewu,
+            COALESCE(CAST(ROUND(`韦德之道-得物寄售-销量`, 0) AS BIGINT), 0)                 AS qty_dewu_consign,
+            COALESCE(CAST(ROUND(`得物APP转寄_95分-销量`, 0) AS BIGINT), 0)                  AS qty_95fen,
+            COALESCE(CAST(ROUND(`广东炫动商贸有限公司(李宁客户)-销量`, 0) AS BIGINT), 0)    AS qty_guangdong,
+            COALESCE(CAST(ROUND(`全勇分销-销量`, 0) AS BIGINT), 0)                          AS qty_quanyong,
+            COALESCE(CAST(ROUND(`应科迪_客户-销量`, 0) AS BIGINT), 0)                       AS qty_yingkedi,
+            COALESCE(CAST(ROUND(`韦德线下店铺-销量`, 0) AS BIGINT), 0)                      AS qty_offline,
+            COALESCE(CAST(ROUND(`韦德日本站-销量`, 0) AS BIGINT), 0)                        AS qty_japan,
+            COALESCE(CAST(ROUND(`韦德西语站-销量`, 0) AS BIGINT), 0)                        AS qty_spanish,
+            COALESCE(CAST(ROUND(`dw_韦德伟宏店-销量`, 0) AS BIGINT), 0)                     AS qty_weihong,
+            COALESCE(CAST(ROUND(`韦德_95分店-销量`, 0) AS BIGINT), 0)                       AS qty_95fen_shop,
+            COALESCE(CAST(ROUND(`拼多多_博耶运动户外专营店-销量`, 0) AS BIGINT), 0)         AS qty_pdd,
+            COALESCE(CAST(ROUND(`eBay-销量`, 0) AS BIGINT), 0)                              AS qty_ebay,
+            COALESCE(CAST(ROUND(`韦德之道--招待费-销量`, 0) AS BIGINT), 0)                  AS qty_entertainment,
+            COALESCE(CAST(ROUND(`韦德德国站-销量`, 0) AS BIGINT), 0)                        AS qty_germany,
+            COALESCE(CAST(ROUND(`韦德之道B2B-销量`, 0) AS BIGINT), 0)                       AS qty_b2b,
+            COALESCE(CAST(`韦德之道-金额` AS DECIMAL(18,6)), 0)                             AS amt_wd,
+            COALESCE(CAST(`韦德之道寄样-金额` AS DECIMAL(18,6)), 0)                         AS amt_wd_sample,
+            COALESCE(CAST(`得物APP_韦德-金额` AS DECIMAL(18,6)), 0)                         AS amt_dewu,
+            COALESCE(CAST(`韦德之道-得物寄售-金额` AS DECIMAL(18,6)), 0)                    AS amt_dewu_consign,
+            COALESCE(CAST(`得物APP转寄_95分-金额` AS DECIMAL(18,6)), 0)                     AS amt_95fen,
+            COALESCE(CAST(`广东炫动商贸有限公司(李宁客户)-金额` AS DECIMAL(18,6)), 0)       AS amt_guangdong,
+            COALESCE(CAST(`全勇分销-金额` AS DECIMAL(18,6)), 0)                             AS amt_quanyong,
+            COALESCE(CAST(`应科迪_客户-金额` AS DECIMAL(18,6)), 0)                          AS amt_yingkedi,
+            COALESCE(CAST(`韦德线下店铺-金额` AS DECIMAL(18,6)), 0)                         AS amt_offline,
+            COALESCE(CAST(`韦德日本站-金额` AS DECIMAL(18,6)), 0)                           AS amt_japan,
+            COALESCE(CAST(`韦德西语站-金额` AS DECIMAL(18,6)), 0)                           AS amt_spanish,
+            COALESCE(CAST(`dw_韦德伟宏店-金额` AS DECIMAL(18,6)), 0)                        AS amt_weihong,
+            COALESCE(CAST(`韦德_95分店-金额` AS DECIMAL(18,6)), 0)                          AS amt_95fen_shop,
+            COALESCE(CAST(`拼多多_博耶运动户外专营店-金额` AS DECIMAL(18,6)), 0)            AS amt_pdd,
+            COALESCE(CAST(`eBay-金额` AS DECIMAL(18,6)), 0)                                 AS amt_ebay,
+            COALESCE(CAST(`韦德之道--招待费-金额` AS DECIMAL(18,6)), 0)                     AS amt_entertainment,
+            COALESCE(CAST(`韦德德国站-金额` AS DECIMAL(18,6)), 0)                           AS amt_germany,
+            COALESCE(CAST(`韦德之道B2B-金额` AS DECIMAL(18,6)), 0)                          AS amt_b2b,
+            COALESCE(CAST(NULLIF(TRIM(`总和`), '') AS DECIMAL(18,6)), 0)                    AS total_sum,
+            COALESCE(CAST(`总和 副本` AS DECIMAL(18,6)), 0)                                  AS total_sum_copy,
+            COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
+            'wd_sales_03'                                                                   AS source_table,
+            COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS insert_date,
+            COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS update_date
+        FROM feishu.wd_sales_03 
+        WHERE record_id IS NOT NULL
+        UNION ALL
+        -- ==========================================
+        -- wd_sales_04
+        -- ==========================================
+        SELECT
+            id                                                                              AS id,
+            COALESCE(NULLIF(TRIM(record_id), ''), 'None')                                   AS record_id,
+            '韦德'                                                                           AS brand,
+            COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                         AS sku,
+            COALESCE(DATE(销售日期), DATE('1970-01-01'))                                    AS sales_date,
+            COALESCE(NULLIF(TRIM(款号), ''), 'None')                                        AS style_no,
+            COALESCE(NULLIF(TRIM(尺码), ''), 'None')                                        AS size,
+            COALESCE(DATE(首次销售日期), DATE('1970-01-01'))                                AS first_sales_date,
+            COALESCE(NULLIF(TRIM(自然周), ''), 'None')                                      AS natural_week,
+            COALESCE(NULLIF(TRIM(销售周期所属周), ''), 'None')                              AS sales_week,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货1`), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS order_replenish_1,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货数量`), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS order_replenish,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货数量`), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS order_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际总销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS actual_total_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计销售周期天数), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS est_cycle_days,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计周销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS est_week_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS est_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际周销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS actual_week_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS actual_qty,
+            COALESCE(NULLIF(TRIM(达成率), ''), 'None')                                      AS achievement_rate,
+            COALESCE(NULLIF(TRIM(预警), ''), 'None')                                        AS alert,
+            COALESCE(CAST(ROUND(`韦德之道-销量`, 0) AS BIGINT), 0)                          AS qty_wd,
+            COALESCE(CAST(ROUND(`韦德之道寄样-销量`, 0) AS BIGINT), 0)                      AS qty_wd_sample,
+            COALESCE(CAST(ROUND(`得物APP_韦德-销量`, 0) AS BIGINT), 0)                      AS qty_dewu,
+            COALESCE(CAST(ROUND(`韦德之道-得物寄售-销量`, 0) AS BIGINT), 0)                 AS qty_dewu_consign,
+            COALESCE(CAST(ROUND(`得物APP转寄_95分-销量`, 0) AS BIGINT), 0)                  AS qty_95fen,
+            COALESCE(CAST(ROUND(`广东炫动商贸有限公司(李宁客户)-销量`, 0) AS BIGINT), 0)    AS qty_guangdong,
+            COALESCE(CAST(ROUND(`全勇分销-销量`, 0) AS BIGINT), 0)                          AS qty_quanyong,
+            COALESCE(CAST(ROUND(`应科迪_客户-销量`, 0) AS BIGINT), 0)                       AS qty_yingkedi,
+            COALESCE(CAST(ROUND(`韦德线下店铺-销量`, 0) AS BIGINT), 0)                      AS qty_offline,
+            COALESCE(CAST(ROUND(`韦德日本站-销量`, 0) AS BIGINT), 0)                        AS qty_japan,
+            COALESCE(CAST(ROUND(`韦德西语站-销量`, 0) AS BIGINT), 0)                        AS qty_spanish,
+            COALESCE(CAST(ROUND(`dw_韦德伟宏店-销量`, 0) AS BIGINT), 0)                     AS qty_weihong,
+            COALESCE(CAST(ROUND(`韦德_95分店-销量`, 0) AS BIGINT), 0)                       AS qty_95fen_shop,
+            COALESCE(CAST(ROUND(`拼多多_博耶运动户外专营店-销量`, 0) AS BIGINT), 0)         AS qty_pdd,
+            COALESCE(CAST(ROUND(`eBay-销量`, 0) AS BIGINT), 0)                              AS qty_ebay,
+            COALESCE(CAST(ROUND(`韦德之道--招待费-销量`, 0) AS BIGINT), 0)                  AS qty_entertainment,
+            COALESCE(CAST(ROUND(`韦德德国站-销量`, 0) AS BIGINT), 0)                        AS qty_germany,
+            COALESCE(CAST(ROUND(`韦德之道B2B-销量`, 0) AS BIGINT), 0)                       AS qty_b2b,
+            COALESCE(CAST(`韦德之道-金额` AS DECIMAL(18,6)), 0)                             AS amt_wd,
+            COALESCE(CAST(`韦德之道寄样-金额` AS DECIMAL(18,6)), 0)                         AS amt_wd_sample,
+            COALESCE(CAST(`得物APP_韦德-金额` AS DECIMAL(18,6)), 0)                         AS amt_dewu,
+            COALESCE(CAST(`韦德之道-得物寄售-金额` AS DECIMAL(18,6)), 0)                    AS amt_dewu_consign,
+            COALESCE(CAST(`得物APP转寄_95分-金额` AS DECIMAL(18,6)), 0)                     AS amt_95fen,
+            COALESCE(CAST(`广东炫动商贸有限公司(李宁客户)-金额` AS DECIMAL(18,6)), 0)       AS amt_guangdong,
+            COALESCE(CAST(`全勇分销-金额` AS DECIMAL(18,6)), 0)                             AS amt_quanyong,
+            COALESCE(CAST(`应科迪_客户-金额` AS DECIMAL(18,6)), 0)                          AS amt_yingkedi,
+            COALESCE(CAST(`韦德线下店铺-金额` AS DECIMAL(18,6)), 0)                         AS amt_offline,
+            COALESCE(CAST(`韦德日本站-金额` AS DECIMAL(18,6)), 0)                           AS amt_japan,
+            COALESCE(CAST(`韦德西语站-金额` AS DECIMAL(18,6)), 0)                           AS amt_spanish,
+            COALESCE(CAST(`dw_韦德伟宏店-金额` AS DECIMAL(18,6)), 0)                        AS amt_weihong,
+            COALESCE(CAST(`韦德_95分店-金额` AS DECIMAL(18,6)), 0)                          AS amt_95fen_shop,
+            COALESCE(CAST(`拼多多_博耶运动户外专营店-金额` AS DECIMAL(18,6)), 0)            AS amt_pdd,
+            COALESCE(CAST(`eBay-金额` AS DECIMAL(18,6)), 0)                                 AS amt_ebay,
+            COALESCE(CAST(`韦德之道--招待费-金额` AS DECIMAL(18,6)), 0)                     AS amt_entertainment,
+            COALESCE(CAST(`韦德德国站-金额` AS DECIMAL(18,6)), 0)                           AS amt_germany,
+            COALESCE(CAST(`韦德之道B2B-金额` AS DECIMAL(18,6)), 0)                          AS amt_b2b,
+            COALESCE(CAST(NULLIF(TRIM(`总和`), '') AS DECIMAL(18,6)), 0)                    AS total_sum,
+            COALESCE(CAST(`总和 副本` AS DECIMAL(18,6)), 0)                                  AS total_sum_copy,
+            COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
+            'wd_sales_04'                                                                   AS source_table,
+            COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS insert_date,
+            COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS update_date
+        FROM feishu.wd_sales_04 
+        WHERE record_id IS NOT NULL
+        UNION ALL
+        -- ==========================================
+        -- wd_sales_05
+        -- ==========================================
+        SELECT
+            id                                                                              AS id,
+            COALESCE(NULLIF(TRIM(record_id), ''), 'None')                                   AS record_id,
+            '韦德'                                                                           AS brand,
+            COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                         AS sku,
+            COALESCE(DATE(销售日期), DATE('1970-01-01'))                                    AS sales_date,
+            COALESCE(NULLIF(TRIM(款号), ''), 'None')                                        AS style_no,
+            COALESCE(NULLIF(TRIM(尺码), ''), 'None')                                        AS size,
+            COALESCE(DATE(首次销售日期), DATE('1970-01-01'))                                AS first_sales_date,
+            COALESCE(NULLIF(TRIM(自然周), ''), 'None')                                      AS natural_week,
+            COALESCE(NULLIF(TRIM(销售周期所属周), ''), 'None')                              AS sales_week,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货1`), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS order_replenish_1,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货数量`), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS order_replenish,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货数量`), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS order_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际总销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS actual_total_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计销售周期天数), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS est_cycle_days,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计周销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS est_week_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS est_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际周销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS actual_week_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS actual_qty,
+            COALESCE(NULLIF(TRIM(达成率), ''), 'None')                                      AS achievement_rate,
+            COALESCE(NULLIF(TRIM(预警), ''), 'None')                                        AS alert,
+            COALESCE(CAST(ROUND(`韦德之道-销量`, 0) AS BIGINT), 0)                          AS qty_wd,
+            COALESCE(CAST(ROUND(`韦德之道寄样-销量`, 0) AS BIGINT), 0)                      AS qty_wd_sample,
+            COALESCE(CAST(ROUND(`得物APP_韦德-销量`, 0) AS BIGINT), 0)                      AS qty_dewu,
+            COALESCE(CAST(ROUND(`韦德之道-得物寄售-销量`, 0) AS BIGINT), 0)                 AS qty_dewu_consign,
+            COALESCE(CAST(ROUND(`得物APP转寄_95分-销量`, 0) AS BIGINT), 0)                  AS qty_95fen,
+            COALESCE(CAST(ROUND(`广东炫动商贸有限公司(李宁客户)-销量`, 0) AS BIGINT), 0)    AS qty_guangdong,
+            COALESCE(CAST(ROUND(`全勇分销-销量`, 0) AS BIGINT), 0)                          AS qty_quanyong,
+            COALESCE(CAST(ROUND(`应科迪_客户-销量`, 0) AS BIGINT), 0)                       AS qty_yingkedi,
+            COALESCE(CAST(ROUND(`韦德线下店铺-销量`, 0) AS BIGINT), 0)                      AS qty_offline,
+            COALESCE(CAST(ROUND(`韦德日本站-销量`, 0) AS BIGINT), 0)                        AS qty_japan,
+            COALESCE(CAST(ROUND(`韦德西语站-销量`, 0) AS BIGINT), 0)                        AS qty_spanish,
+            COALESCE(CAST(ROUND(`dw_韦德伟宏店-销量`, 0) AS BIGINT), 0)                     AS qty_weihong,
+            COALESCE(CAST(ROUND(`韦德_95分店-销量`, 0) AS BIGINT), 0)                       AS qty_95fen_shop,
+            COALESCE(CAST(ROUND(`拼多多_博耶运动户外专营店-销量`, 0) AS BIGINT), 0)         AS qty_pdd,
+            COALESCE(CAST(ROUND(`eBay-销量`, 0) AS BIGINT), 0)                              AS qty_ebay,
+            COALESCE(CAST(ROUND(`韦德之道--招待费-销量`, 0) AS BIGINT), 0)                  AS qty_entertainment,
+            COALESCE(CAST(ROUND(`韦德德国站-销量`, 0) AS BIGINT), 0)                        AS qty_germany,
+            COALESCE(CAST(ROUND(`韦德之道B2B-销量`, 0) AS BIGINT), 0)                       AS qty_b2b,
+            COALESCE(CAST(`韦德之道-金额` AS DECIMAL(18,6)), 0)                             AS amt_wd,
+            COALESCE(CAST(`韦德之道寄样-金额` AS DECIMAL(18,6)), 0)                         AS amt_wd_sample,
+            COALESCE(CAST(`得物APP_韦德-金额` AS DECIMAL(18,6)), 0)                         AS amt_dewu,
+            COALESCE(CAST(`韦德之道-得物寄售-金额` AS DECIMAL(18,6)), 0)                    AS amt_dewu_consign,
+            COALESCE(CAST(`得物APP转寄_95分-金额` AS DECIMAL(18,6)), 0)                     AS amt_95fen,
+            COALESCE(CAST(`广东炫动商贸有限公司(李宁客户)-金额` AS DECIMAL(18,6)), 0)       AS amt_guangdong,
+            COALESCE(CAST(`全勇分销-金额` AS DECIMAL(18,6)), 0)                             AS amt_quanyong,
+            COALESCE(CAST(`应科迪_客户-金额` AS DECIMAL(18,6)), 0)                          AS amt_yingkedi,
+            COALESCE(CAST(`韦德线下店铺-金额` AS DECIMAL(18,6)), 0)                         AS amt_offline,
+            COALESCE(CAST(`韦德日本站-金额` AS DECIMAL(18,6)), 0)                           AS amt_japan,
+            COALESCE(CAST(`韦德西语站-金额` AS DECIMAL(18,6)), 0)                           AS amt_spanish,
+            COALESCE(CAST(`dw_韦德伟宏店-金额` AS DECIMAL(18,6)), 0)                        AS amt_weihong,
+            COALESCE(CAST(`韦德_95分店-金额` AS DECIMAL(18,6)), 0)                          AS amt_95fen_shop,
+            COALESCE(CAST(`拼多多_博耶运动户外专营店-金额` AS DECIMAL(18,6)), 0)            AS amt_pdd,
+            COALESCE(CAST(`eBay-金额` AS DECIMAL(18,6)), 0)                                 AS amt_ebay,
+            COALESCE(CAST(`韦德之道--招待费-金额` AS DECIMAL(18,6)), 0)                     AS amt_entertainment,
+            COALESCE(CAST(`韦德德国站-金额` AS DECIMAL(18,6)), 0)                           AS amt_germany,
+            COALESCE(CAST(`韦德之道B2B-金额` AS DECIMAL(18,6)), 0)                          AS amt_b2b,
+            COALESCE(CAST(NULLIF(TRIM(`总和`), '') AS DECIMAL(18,6)), 0)                    AS total_sum,
+            COALESCE(CAST(`总和 副本` AS DECIMAL(18,6)), 0)                                  AS total_sum_copy,
+            COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
+            'wd_sales_05'                                                                   AS source_table,
+            COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS insert_date,
+            COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS update_date
+        FROM feishu.wd_sales_05 
+        WHERE record_id IS NOT NULL
+        UNION ALL
+        -- ==========================================
+        -- wd_sales_06
+        -- ==========================================
+        SELECT
+            id                                                                              AS id,
+            COALESCE(NULLIF(TRIM(record_id), ''), 'None')                                   AS record_id,
+            '韦德'                                                                           AS brand,
+            COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                         AS sku,
+            COALESCE(DATE(销售日期), DATE('1970-01-01'))                                    AS sales_date,
+            COALESCE(NULLIF(TRIM(款号), ''), 'None')                                        AS style_no,
+            COALESCE(NULLIF(TRIM(尺码), ''), 'None')                                        AS size,
+            COALESCE(DATE(首次销售日期), DATE('1970-01-01'))                                AS first_sales_date,
+            COALESCE(NULLIF(TRIM(自然周), ''), 'None')                                      AS natural_week,
+            COALESCE(NULLIF(TRIM(销售周期所属周), ''), 'None')                              AS sales_week,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货1`), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS order_replenish_1,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货数量`), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS order_replenish,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货数量`), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS order_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际总销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS actual_total_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计销售周期天数), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS est_cycle_days,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计周销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS est_week_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS est_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际周销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS actual_week_qty,
+            COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际销量), '') AS DECIMAL(18,6)), 0) AS BIGINT), 0) AS actual_qty,
+            COALESCE(NULLIF(TRIM(达成率), ''), 'None')                                      AS achievement_rate,
+            COALESCE(NULLIF(TRIM(预警), ''), 'None')                                        AS alert,
+            COALESCE(CAST(ROUND(`韦德之道-销量`, 0) AS BIGINT), 0)                          AS qty_wd,
+            COALESCE(CAST(ROUND(`韦德之道寄样-销量`, 0) AS BIGINT), 0)                      AS qty_wd_sample,
+            COALESCE(CAST(ROUND(`得物APP_韦德-销量`, 0) AS BIGINT), 0)                      AS qty_dewu,
+            COALESCE(CAST(ROUND(`韦德之道-得物寄售-销量`, 0) AS BIGINT), 0)                 AS qty_dewu_consign,
+            COALESCE(CAST(ROUND(`得物APP转寄_95分-销量`, 0) AS BIGINT), 0)                  AS qty_95fen,
+            COALESCE(CAST(ROUND(`广东炫动商贸有限公司(李宁客户)-销量`, 0) AS BIGINT), 0)    AS qty_guangdong,
+            COALESCE(CAST(ROUND(`全勇分销-销量`, 0) AS BIGINT), 0)                          AS qty_quanyong,
+            COALESCE(CAST(ROUND(`应科迪_客户-销量`, 0) AS BIGINT), 0)                       AS qty_yingkedi,
+            COALESCE(CAST(ROUND(`韦德线下店铺-销量`, 0) AS BIGINT), 0)                      AS qty_offline,
+            COALESCE(CAST(ROUND(`韦德日本站-销量`, 0) AS BIGINT), 0)                        AS qty_japan,
+            COALESCE(CAST(ROUND(`韦德西语站-销量`, 0) AS BIGINT), 0)                        AS qty_spanish,
+            COALESCE(CAST(ROUND(`dw_韦德伟宏店-销量`, 0) AS BIGINT), 0)                     AS qty_weihong,
+            COALESCE(CAST(ROUND(`韦德_95分店-销量`, 0) AS BIGINT), 0)                       AS qty_95fen_shop,
+            COALESCE(CAST(ROUND(`拼多多_博耶运动户外专营店-销量`, 0) AS BIGINT), 0)         AS qty_pdd,
+            COALESCE(CAST(ROUND(`eBay-销量`, 0) AS BIGINT), 0)                              AS qty_ebay,
+            COALESCE(CAST(ROUND(`韦德之道--招待费-销量`, 0) AS BIGINT), 0)                  AS qty_entertainment,
+            COALESCE(CAST(ROUND(`韦德德国站-销量`, 0) AS BIGINT), 0)                        AS qty_germany,
+            COALESCE(CAST(ROUND(`韦德之道B2B-销量`, 0) AS BIGINT), 0)                       AS qty_b2b,
+            COALESCE(CAST(`韦德之道-金额` AS DECIMAL(18,6)), 0)                             AS amt_wd,
+            COALESCE(CAST(`韦德之道寄样-金额` AS DECIMAL(18,6)), 0)                         AS amt_wd_sample,
+            COALESCE(CAST(`得物APP_韦德-金额` AS DECIMAL(18,6)), 0)                         AS amt_dewu,
+            COALESCE(CAST(`韦德之道-得物寄售-金额` AS DECIMAL(18,6)), 0)                    AS amt_dewu_consign,
+            COALESCE(CAST(`得物APP转寄_95分-金额` AS DECIMAL(18,6)), 0)                     AS amt_95fen,
+            COALESCE(CAST(`广东炫动商贸有限公司(李宁客户)-金额` AS DECIMAL(18,6)), 0)       AS amt_guangdong,
+            COALESCE(CAST(`全勇分销-金额` AS DECIMAL(18,6)), 0)                             AS amt_quanyong,
+            COALESCE(CAST(`应科迪_客户-金额` AS DECIMAL(18,6)), 0)                          AS amt_yingkedi,
+            COALESCE(CAST(`韦德线下店铺-金额` AS DECIMAL(18,6)), 0)                         AS amt_offline,
+            COALESCE(CAST(`韦德日本站-金额` AS DECIMAL(18,6)), 0)                           AS amt_japan,
+            COALESCE(CAST(`韦德西语站-金额` AS DECIMAL(18,6)), 0)                           AS amt_spanish,
+            COALESCE(CAST(`dw_韦德伟宏店-金额` AS DECIMAL(18,6)), 0)                        AS amt_weihong,
+            COALESCE(CAST(`韦德_95分店-金额` AS DECIMAL(18,6)), 0)                          AS amt_95fen_shop,
+            COALESCE(CAST(`拼多多_博耶运动户外专营店-金额` AS DECIMAL(18,6)), 0)            AS amt_pdd,
+            COALESCE(CAST(`eBay-金额` AS DECIMAL(18,6)), 0)                                 AS amt_ebay,
+            COALESCE(CAST(`韦德之道--招待费-金额` AS DECIMAL(18,6)), 0)                     AS amt_entertainment,
+            COALESCE(CAST(`韦德德国站-金额` AS DECIMAL(18,6)), 0)                           AS amt_germany,
+            COALESCE(CAST(`韦德之道B2B-金额` AS DECIMAL(18,6)), 0)                          AS amt_b2b,
+            COALESCE(CAST(NULLIF(TRIM(`总和`), '') AS DECIMAL(18,6)), 0)                    AS total_sum,
+            COALESCE(CAST(`总和 副本` AS DECIMAL(18,6)), 0)                                  AS total_sum_copy,
+            COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
+            'wd_sales_06'                                                                   AS source_table,
+            COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS insert_date,
+            COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS update_date
+        FROM feishu.wd_sales_06 
+        WHERE record_id IS NOT NULL;
 
--- 类型A：wd_sales_01~06（55字段，最全）- 直接映射
-INSERT INTO feishu_dwd.dwd_feishu_sales_wd_d (
-    id, record_id, brand, sku, sales_date, style_no, size, first_sales_date, sales_week,
-    order_replenish_1, order_replenish, actual_total_qty, est_cycle_days, est_week_qty,
-    est_qty, actual_week_qty, actual_qty,
-    qty_wd, qty_wd_sample, qty_dewu, qty_dewu_consign, qty_95fen, qty_guangdong,
-    qty_quanyong, qty_yingkedi, qty_offline, qty_japan, qty_spanish, qty_weihong,
-    qty_95fen_shop, qty_pdd, qty_ebay, qty_entertainment, qty_germany, qty_b2b,
-    amt_wd, amt_wd_sample, amt_dewu, amt_dewu_consign, amt_95fen, amt_guangdong,
-    amt_quanyong, amt_yingkedi, amt_offline, amt_japan, amt_spanish, amt_weihong,
-    amt_95fen_shop, amt_pdd, amt_ebay, amt_entertainment, amt_germany, amt_b2b,
-    total_sum, total_sum_copy, sync_time, source_table, insert_date, update_date
-)
-SELECT
-    id                                                                              AS id,
-    -- 字符串类型 (varchar)：保留 TRIM 和 NULLIF
-    COALESCE(NULLIF(TRIM(record_id), ''), 'None')                                   AS record_id,
-    '韦德'                                                                           AS brand,
-    COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                         AS sku,
-    
-    -- 日期时间类型 (datetime)：场景一，去除 TRIM 和 NULLIF
-    COALESCE(DATE(销售日期), DATE('1970-01-01'))                                    AS sales_date,
-    
-    COALESCE(NULLIF(TRIM(款号), ''), 'None')                                        AS style_no,
-    COALESCE(NULLIF(TRIM(尺码), ''), 'None')                                        AS size,
-    
-    -- 日期时间类型 (datetime)：场景一，去除 TRIM 和 NULLIF
-    COALESCE(DATE(首次销售日期), DATE('1970-01-01'))                                AS first_sales_date,
-    
-    COALESCE(NULLIF(TRIM(销售周期所属周), ''), 'None')                              AS sales_week,
-    
-    -- ================= 销售指标 =================
-    -- 05表特有逻辑：包含"订货+补货1"和"订货+补货"两个字段
-    -- VARCHAR 转 BIGINT：场景二，先转 DECIMAL 再 ROUND 转 BIGINT，防止源数据带小数报错
-    COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货1`), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0) AS order_replenish_1,
-    COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货`), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)  AS order_replenish,
-    
-    COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际总销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)      AS actual_total_qty,
-    COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计销售周期天数), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0) AS est_cycle_days,
-    COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计周销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)      AS est_week_qty,
-    
-    -- DECIMAL 转 BIGINT：场景一，直接 ROUND 转 BIGINT，去除 TRIM 和 NULLIF
-    COALESCE(CAST(ROUND(`预计销量`, 0) AS BIGINT), 0)                               AS est_qty,
-    
-    -- VARCHAR 转 BIGINT：场景二
-    COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际周销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)      AS actual_week_qty,
-    
-    -- DECIMAL 转 BIGINT：场景一
-    COALESCE(CAST(ROUND(`实际销量`, 0) AS BIGINT), 0)                               AS actual_qty,
-    
-    -- ================= 18个渠道销量 =================
-    -- DECIMAL 转 BIGINT：场景一，直接 ROUND 转 BIGINT，去除 TRIM 和 NULLIF
-    COALESCE(CAST(ROUND(`韦德之道-销量`, 0) AS BIGINT), 0)                          AS qty_wd,
-    COALESCE(CAST(ROUND(`韦德之道寄样-销量`, 0) AS BIGINT), 0)                      AS qty_wd_sample,
-    COALESCE(CAST(ROUND(`得物APP_韦德-销量`, 0) AS BIGINT), 0)                      AS qty_dewu,
-    COALESCE(CAST(ROUND(`韦德之道-得物寄售-销量`, 0) AS BIGINT), 0)                 AS qty_dewu_consign,
-    COALESCE(CAST(ROUND(`得物APP转寄_95分-销量`, 0) AS BIGINT), 0)                  AS qty_95fen,
-    COALESCE(CAST(ROUND(`广东炫动商贸有限公司(李宁客户)-销量`, 0) AS BIGINT), 0)    AS qty_guangdong,
-    COALESCE(CAST(ROUND(`全勇分销-销量`, 0) AS BIGINT), 0)                          AS qty_quanyong,
-    COALESCE(CAST(ROUND(`应科迪_客户-销量`, 0) AS BIGINT), 0)                       AS qty_yingkedi,
-    COALESCE(CAST(ROUND(`韦德线下店铺-销量`, 0) AS BIGINT), 0)                      AS qty_offline,
-    COALESCE(CAST(ROUND(`韦德日本站-销量`, 0) AS BIGINT), 0)                        AS qty_japan,
-    COALESCE(CAST(ROUND(`韦德西语站-销量`, 0) AS BIGINT), 0)                        AS qty_spanish,
-    COALESCE(CAST(ROUND(`dw_韦德伟宏店-销量`, 0) AS BIGINT), 0)                     AS qty_weihong,
-    COALESCE(CAST(ROUND(`韦德_95分店-销量`, 0) AS BIGINT), 0)                       AS qty_95fen_shop,
-    COALESCE(CAST(ROUND(`拼多多_博耶运动户外专营店-销量`, 0) AS BIGINT), 0)         AS qty_pdd,
-    COALESCE(CAST(ROUND(`eBay-销量`, 0) AS BIGINT), 0)                              AS qty_ebay,
-    COALESCE(CAST(ROUND(`韦德之道--招待费-销量`, 0) AS BIGINT), 0)                  AS qty_entertainment,
-    COALESCE(CAST(ROUND(`韦德德国站-销量`, 0) AS BIGINT), 0)                        AS qty_germany,
-    COALESCE(CAST(ROUND(`韦德之道B2B-销量`, 0) AS BIGINT), 0)                       AS qty_b2b,
-    
-    -- ================= 18个渠道金额 =================
-    -- DECIMAL 转 DECIMAL(18,6)：场景一，直接 CAST 控制精度，去除 TRIM 和 NULLIF
-    COALESCE(CAST(`韦德之道-金额` AS DECIMAL(18,6)), 0)                             AS amt_wd,
-    COALESCE(CAST(`韦德之道寄样-金额` AS DECIMAL(18,6)), 0)                         AS amt_wd_sample,
-    COALESCE(CAST(`得物APP_韦德-金额` AS DECIMAL(18,6)), 0)                         AS amt_dewu,
-    COALESCE(CAST(`韦德之道-得物寄售-金额` AS DECIMAL(18,6)), 0)                    AS amt_dewu_consign,
-    COALESCE(CAST(`得物APP转寄_95分-金额` AS DECIMAL(18,6)), 0)                     AS amt_95fen,
-    COALESCE(CAST(`广东炫动商贸有限公司(李宁客户)-金额` AS DECIMAL(18,6)), 0)       AS amt_guangdong,
-    COALESCE(CAST(`全勇分销-金额` AS DECIMAL(18,6)), 0)                             AS amt_quanyong,
-    COALESCE(CAST(`应科迪_客户-金额` AS DECIMAL(18,6)), 0)                          AS amt_yingkedi,
-    COALESCE(CAST(`韦德线下店铺-金额` AS DECIMAL(18,6)), 0)                         AS amt_offline,
-    COALESCE(CAST(`韦德日本站-金额` AS DECIMAL(18,6)), 0)                           AS amt_japan,
-    COALESCE(CAST(`韦德西语站-金额` AS DECIMAL(18,6)), 0)                           AS amt_spanish,
-    COALESCE(CAST(`dw_韦德伟宏店-金额` AS DECIMAL(18,6)), 0)                        AS amt_weihong,
-    COALESCE(CAST(`韦德_95分店-金额` AS DECIMAL(18,6)), 0)                          AS amt_95fen_shop,
-    COALESCE(CAST(`拼多多_博耶运动户外专营店-金额` AS DECIMAL(18,6)), 0)            AS amt_pdd,
-    COALESCE(CAST(`eBay-金额` AS DECIMAL(18,6)), 0)                                 AS amt_ebay,
-    COALESCE(CAST(`韦德之道--招待费-金额` AS DECIMAL(18,6)), 0)                     AS amt_entertainment,
-    COALESCE(CAST(`韦德德国站-金额` AS DECIMAL(18,6)), 0)                           AS amt_germany,
-    COALESCE(CAST(`韦德之道B2B-金额` AS DECIMAL(18,6)), 0)                          AS amt_b2b,
-    
-    -- ================= 汇总字段 =================
-    -- VARCHAR 转 DECIMAL(18,6)：场景二，保留 TRIM 和 NULLIF，直接转 DECIMAL
-    COALESCE(CAST(NULLIF(TRIM(`总和`), '') AS DECIMAL(18,6)), 0)                    AS total_sum,
-    
-    -- DECIMAL 转 DECIMAL(18,6)：场景一，直接 CAST，去除 TRIM 和 NULLIF
-    COALESCE(CAST(`总和 副本` AS DECIMAL(18,6)), 0)                                 AS total_sum_copy,
-    
-    -- ================= 系统字段 =================
-    -- 日期时间类型 (datetime)：场景一
-    COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
-    'wd_sales_06'                                                                   AS source_table,
-    NOW()                                                                           AS insert_date,
-    NOW()                                                                           AS update_date    
-FROM feishu.wd_sales_06
-WHERE record_id IS NOT NULL;
-
-
-
--- 类型B：wd_sales_23（47字段）- 缺少8个销售指标中的7个，"实际销量"为varchar，无"总和副本"
--- 对齐方式：缺失的销售指标字段补NULL，其他字段正常映射
-INSERT INTO feishu_dwd.dwd_feishu_sales_wd_d (
-    id, record_id, brand, sku, sales_date, style_no, size, first_sales_date, sales_week,
-    order_replenish_1, order_replenish, actual_total_qty, est_cycle_days, est_week_qty,
-    est_qty, actual_week_qty, actual_qty,
-    qty_wd, qty_wd_sample, qty_dewu, qty_dewu_consign, qty_95fen, qty_guangdong,
-    qty_quanyong, qty_yingkedi, qty_offline, qty_japan, qty_spanish, qty_weihong,
-    qty_95fen_shop, qty_pdd, qty_ebay, qty_entertainment, qty_germany, qty_b2b,
-    amt_wd, amt_wd_sample, amt_dewu, amt_dewu_consign, amt_95fen, amt_guangdong,
-    amt_quanyong, amt_yingkedi, amt_offline, amt_japan, amt_spanish, amt_weihong,
-    amt_95fen_shop, amt_pdd, amt_ebay, amt_entertainment, amt_germany, amt_b2b,
-    total_sum, total_sum_copy, sync_time, source_table, insert_date, update_date
-)
-SELECT
-    id                                                                              AS id,
-    -- 字符串类型 (varchar)：保留 TRIM 和 NULLIF
-    COALESCE(NULLIF(TRIM(record_id), ''), 'None')                                   AS record_id,
-    '韦德'                                                                           AS brand,
-    COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                         AS sku,
-    
-    -- 日期时间类型 (datetime)：场景一，去除 TRIM 和 NULLIF
-    COALESCE(DATE(销售日期), DATE('1970-01-01'))                                    AS sales_date,
-    
-    COALESCE(NULLIF(TRIM(款号), ''), 'None')                                        AS style_no,
-    COALESCE(NULLIF(TRIM(尺码), ''), 'None')                                        AS size,
-    
-    -- 日期时间类型 (datetime)：场景一，去除 TRIM 和 NULLIF
-    COALESCE(DATE(首次销售日期), DATE('1970-01-01'))                                AS first_sales_date,
-    
-    COALESCE(NULLIF(TRIM(销售周期所属周), ''), 'None')                              AS sales_week,
-    
-    -- ================= 销售指标 =================
-    -- 23分表缺少的销售指标字段补0（7个缺失指标）
-    0                                                                               AS order_replenish_1,
-    0                                                                               AS order_replenish,
-    0                                                                               AS actual_total_qty,
-    0                                                                               AS est_cycle_days,
-    0                                                                               AS est_week_qty,
-    0                                                                               AS est_qty,
-    0                                                                               AS actual_week_qty,
-    
-    -- 23分表"实际销量"为 varchar，需 CAST：场景二，先转 DECIMAL 再 ROUND 转 BIGINT，防止源数据带小数报错
-    COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0) AS actual_qty,
-    
-    -- ================= 18个渠道销量 =================
-    -- 18个渠道销量（23分表有，与06一致），物理类型为 decimal：场景一，直接 ROUND 转 BIGINT，去除 TRIM 和 NULLIF
-    COALESCE(CAST(ROUND(`韦德之道-销量`, 0) AS BIGINT), 0)                          AS qty_wd,
-    COALESCE(CAST(ROUND(`韦德之道寄样-销量`, 0) AS BIGINT), 0)                      AS qty_wd_sample,
-    COALESCE(CAST(ROUND(`得物APP_韦德-销量`, 0) AS BIGINT), 0)                      AS qty_dewu,
-    COALESCE(CAST(ROUND(`韦德之道-得物寄售-销量`, 0) AS BIGINT), 0)                 AS qty_dewu_consign,
-    COALESCE(CAST(ROUND(`得物APP转寄_95分-销量`, 0) AS BIGINT), 0)                  AS qty_95fen,
-    COALESCE(CAST(ROUND(`广东炫动商贸有限公司(李宁客户)-销量`, 0) AS BIGINT), 0)    AS qty_guangdong,
-    COALESCE(CAST(ROUND(`全勇分销-销量`, 0) AS BIGINT), 0)                          AS qty_quanyong,
-    COALESCE(CAST(ROUND(`应科迪_客户-销量`, 0) AS BIGINT), 0)                       AS qty_yingkedi,
-    COALESCE(CAST(ROUND(`韦德线下店铺-销量`, 0) AS BIGINT), 0)                      AS qty_offline,
-    COALESCE(CAST(ROUND(`韦德日本站-销量`, 0) AS BIGINT), 0)                        AS qty_japan,
-    COALESCE(CAST(ROUND(`韦德西语站-销量`, 0) AS BIGINT), 0)                        AS qty_spanish,
-    COALESCE(CAST(ROUND(`dw_韦德伟宏店-销量`, 0) AS BIGINT), 0)                     AS qty_weihong,
-    COALESCE(CAST(ROUND(`韦德_95分店-销量`, 0) AS BIGINT), 0)                       AS qty_95fen_shop,
-    COALESCE(CAST(ROUND(`拼多多_博耶运动户外专营店-销量`, 0) AS BIGINT), 0)         AS qty_pdd,
-    COALESCE(CAST(ROUND(`eBay-销量`, 0) AS BIGINT), 0)                              AS qty_ebay,
-    COALESCE(CAST(ROUND(`韦德之道--招待费-销量`, 0) AS BIGINT), 0)                  AS qty_entertainment,
-    COALESCE(CAST(ROUND(`韦德德国站-销量`, 0) AS BIGINT), 0)                        AS qty_germany,
-    COALESCE(CAST(ROUND(`韦德之道B2B-销量`, 0) AS BIGINT), 0)                       AS qty_b2b,
-    
-    -- ================= 18个渠道金额 =================
-    -- 18个渠道金额，物理类型为 decimal：场景一，直接 CAST 控制精度，去除 TRIM 和 NULLIF
-    COALESCE(CAST(`韦德之道-金额` AS DECIMAL(18,6)), 0)                             AS amt_wd,
-    COALESCE(CAST(`韦德之道寄样-金额` AS DECIMAL(18,6)), 0)                         AS amt_wd_sample,
-    COALESCE(CAST(`得物APP_韦德-金额` AS DECIMAL(18,6)), 0)                         AS amt_dewu,
-    COALESCE(CAST(`韦德之道-得物寄售-金额` AS DECIMAL(18,6)), 0)                    AS amt_dewu_consign,
-    COALESCE(CAST(`得物APP转寄_95分-金额` AS DECIMAL(18,6)), 0)                     AS amt_95fen,
-    COALESCE(CAST(`广东炫动商贸有限公司(李宁客户)-金额` AS DECIMAL(18,6)), 0)       AS amt_guangdong,
-    COALESCE(CAST(`全勇分销-金额` AS DECIMAL(18,6)), 0)                             AS amt_quanyong,
-    COALESCE(CAST(`应科迪_客户-金额` AS DECIMAL(18,6)), 0)                          AS amt_yingkedi,
-    COALESCE(CAST(`韦德线下店铺-金额` AS DECIMAL(18,6)), 0)                         AS amt_offline,
-    COALESCE(CAST(`韦德日本站-金额` AS DECIMAL(18,6)), 0)                           AS amt_japan,
-    COALESCE(CAST(`韦德西语站-金额` AS DECIMAL(18,6)), 0)                           AS amt_spanish,
-    COALESCE(CAST(`dw_韦德伟宏店-金额` AS DECIMAL(18,6)), 0)                        AS amt_weihong,
-    COALESCE(CAST(`韦德_95分店-金额` AS DECIMAL(18,6)), 0)                          AS amt_95fen_shop,
-    COALESCE(CAST(`拼多多_博耶运动户外专营店-金额` AS DECIMAL(18,6)), 0)            AS amt_pdd,
-    COALESCE(CAST(`eBay-金额` AS DECIMAL(18,6)), 0)                                 AS amt_ebay,
-    COALESCE(CAST(`韦德之道--招待费-金额` AS DECIMAL(18,6)), 0)                     AS amt_entertainment,
-    COALESCE(CAST(`韦德德国站-金额` AS DECIMAL(18,6)), 0)                           AS amt_germany,
-    COALESCE(CAST(`韦德之道B2B-金额` AS DECIMAL(18,6)), 0)                          AS amt_b2b,
-    
-    -- ================= 汇总字段 =================
-    -- 汇总字段（23有"总和"无"总和副本"）
-    -- "总和" 为 varchar：场景二，保留 TRIM 和 NULLIF，直接转 DECIMAL
-    COALESCE(CAST(NULLIF(TRIM(`总和`), '') AS DECIMAL(18,6)), 0)                    AS total_sum,
-    
-    -- 缺失"总和副本"，直接补0
-    0                                                                               AS total_sum_copy,
-    
-    -- ================= 系统字段 =================
-    -- 日期时间类型 (datetime)：场景一
-    COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
-    'wd_sales_23'                                                                   AS source_table,
-    NOW()                                                                           AS insert_date,
-    NOW()                                                                           AS update_date
-    
-FROM feishu.wd_sales_23
-WHERE record_id IS NOT NULL;
-
-
-
--- 类型C：wd_sales_30/50（41字段，精简版）- 缺少款号/尺码/首次销售日期/销售周期所属周/8个销售指标/总和/总和副本
--- 对齐方式：所有缺失字段补NULL，仅保留SKU+销售日期+36渠道字段
-INSERT INTO feishu_dwd.dwd_feishu_sales_wd_d (
-    id, record_id, brand, sku, sales_date, style_no, size, first_sales_date, sales_week,
-    order_replenish_1, order_replenish, actual_total_qty, est_cycle_days, est_week_qty,
-    est_qty, actual_week_qty, actual_qty,
-    qty_wd, qty_wd_sample, qty_dewu, qty_dewu_consign, qty_95fen, qty_guangdong,
-    qty_quanyong, qty_yingkedi, qty_offline, qty_japan, qty_spanish, qty_weihong,
-    qty_95fen_shop, qty_pdd, qty_ebay, qty_entertainment, qty_germany, qty_b2b,
-    amt_wd, amt_wd_sample, amt_dewu, amt_dewu_consign, amt_95fen, amt_guangdong,
-    amt_quanyong, amt_yingkedi, amt_offline, amt_japan, amt_spanish, amt_weihong,
-    amt_95fen_shop, amt_pdd, amt_ebay, amt_entertainment, amt_germany, amt_b2b,
-    total_sum, total_sum_copy, sync_time, source_table, insert_date, update_date
-)
-SELECT
-    id                                                                              AS id,
-    -- 字符串类型 (varchar)：保留 TRIM 和 NULLIF
-    COALESCE(NULLIF(TRIM(record_id), ''), 'None')                                   AS record_id,
-    '韦德'                                                                           AS brand,
-    COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                         AS sku,
-    
-    -- 日期时间类型 (datetime)：场景一，去除 TRIM 和 NULLIF
-    COALESCE(DATE(销售日期), DATE('1970-01-01'))                                    AS sales_date,
-    
-    -- 款号/尺码缺失补 'None'
-    'None'                                                                          AS style_no,
-    'None'                                                                          AS size,
-    
-    -- 首次销售日期/销售周期缺失补默认值
-    DATE('1970-01-01')                                                              AS first_sales_date,
-    'None'                                                                          AS sales_week,
-    
-    -- ================= 销售指标 =================
-    -- 8个销售指标全缺失补 0
-    0                                                                               AS order_replenish_1,
-    0                                                                               AS order_replenish,
-    0                                                                               AS actual_total_qty,
-    0                                                                               AS est_cycle_days,
-    0                                                                               AS est_week_qty,
-    0                                                                               AS est_qty,
-    0                                                                               AS actual_week_qty,
-    0                                                                               AS actual_qty,
-    
-    -- ================= 18个渠道销量 =================
-    -- 18个渠道销量（30/50有，与06一致），物理类型为 decimal：场景一，直接 ROUND 转 BIGINT，去除 TRIM 和 NULLIF
-    COALESCE(CAST(ROUND(`韦德之道-销量`, 0) AS BIGINT), 0)                          AS qty_wd,
-    COALESCE(CAST(ROUND(`韦德之道寄样-销量`, 0) AS BIGINT), 0)                      AS qty_wd_sample,
-    COALESCE(CAST(ROUND(`得物APP_韦德-销量`, 0) AS BIGINT), 0)                      AS qty_dewu,
-    COALESCE(CAST(ROUND(`韦德之道-得物寄售-销量`, 0) AS BIGINT), 0)                 AS qty_dewu_consign,
-    COALESCE(CAST(ROUND(`得物APP转寄_95分-销量`, 0) AS BIGINT), 0)                  AS qty_95fen,
-    COALESCE(CAST(ROUND(`广东炫动商贸有限公司(李宁客户)-销量`, 0) AS BIGINT), 0)    AS qty_guangdong,
-    COALESCE(CAST(ROUND(`全勇分销-销量`, 0) AS BIGINT), 0)                          AS qty_quanyong,
-    COALESCE(CAST(ROUND(`应科迪_客户-销量`, 0) AS BIGINT), 0)                       AS qty_yingkedi,
-    COALESCE(CAST(ROUND(`韦德线下店铺-销量`, 0) AS BIGINT), 0)                      AS qty_offline,
-    COALESCE(CAST(ROUND(`韦德日本站-销量`, 0) AS BIGINT), 0)                        AS qty_japan,
-    COALESCE(CAST(ROUND(`韦德西语站-销量`, 0) AS BIGINT), 0)                        AS qty_spanish,
-    COALESCE(CAST(ROUND(`dw_韦德伟宏店-销量`, 0) AS BIGINT), 0)                     AS qty_weihong,
-    COALESCE(CAST(ROUND(`韦德_95分店-销量`, 0) AS BIGINT), 0)                       AS qty_95fen_shop,
-    COALESCE(CAST(ROUND(`拼多多_博耶运动户外专营店-销量`, 0) AS BIGINT), 0)         AS qty_pdd,
-    COALESCE(CAST(ROUND(`eBay-销量`, 0) AS BIGINT), 0)                              AS qty_ebay,
-    COALESCE(CAST(ROUND(`韦德之道--招待费-销量`, 0) AS BIGINT), 0)                  AS qty_entertainment,
-    COALESCE(CAST(ROUND(`韦德德国站-销量`, 0) AS BIGINT), 0)                        AS qty_germany,
-    COALESCE(CAST(ROUND(`韦德之道B2B-销量`, 0) AS BIGINT), 0)                       AS qty_b2b,
-    
-    -- ================= 18个渠道金额 =================
-    -- 18个渠道金额，物理类型为 decimal：场景一，直接 CAST 控制精度，去除 TRIM 和 NULLIF
-    COALESCE(CAST(`韦德之道-金额` AS DECIMAL(18,6)), 0)                             AS amt_wd,
-    COALESCE(CAST(`韦德之道寄样-金额` AS DECIMAL(18,6)), 0)                         AS amt_wd_sample,
-    COALESCE(CAST(`得物APP_韦德-金额` AS DECIMAL(18,6)), 0)                         AS amt_dewu,
-    COALESCE(CAST(`韦德之道-得物寄售-金额` AS DECIMAL(18,6)), 0)                    AS amt_dewu_consign,
-    COALESCE(CAST(`得物APP转寄_95分-金额` AS DECIMAL(18,6)), 0)                     AS amt_95fen,
-    COALESCE(CAST(`广东炫动商贸有限公司(李宁客户)-金额` AS DECIMAL(18,6)), 0)       AS amt_guangdong,
-    COALESCE(CAST(`全勇分销-金额` AS DECIMAL(18,6)), 0)                             AS amt_quanyong,
-    COALESCE(CAST(`应科迪_客户-金额` AS DECIMAL(18,6)), 0)                          AS amt_yingkedi,
-    COALESCE(CAST(`韦德线下店铺-金额` AS DECIMAL(18,6)), 0)                         AS amt_offline,
-    COALESCE(CAST(`韦德日本站-金额` AS DECIMAL(18,6)), 0)                           AS amt_japan,
-    COALESCE(CAST(`韦德西语站-金额` AS DECIMAL(18,6)), 0)                           AS amt_spanish,
-    COALESCE(CAST(`dw_韦德伟宏店-金额` AS DECIMAL(18,6)), 0)                        AS amt_weihong,
-    COALESCE(CAST(`韦德_95分店-金额` AS DECIMAL(18,6)), 0)                          AS amt_95fen_shop,
-    COALESCE(CAST(`拼多多_博耶运动户外专营店-金额` AS DECIMAL(18,6)), 0)            AS amt_pdd,
-    COALESCE(CAST(`eBay-金额` AS DECIMAL(18,6)), 0)                                 AS amt_ebay,
-    COALESCE(CAST(`韦德之道--招待费-金额` AS DECIMAL(18,6)), 0)                     AS amt_entertainment,
-    COALESCE(CAST(`韦德德国站-金额` AS DECIMAL(18,6)), 0)                           AS amt_germany,
-    COALESCE(CAST(`韦德之道B2B-金额` AS DECIMAL(18,6)), 0)                          AS amt_b2b,
-    
-    -- ================= 汇总字段 =================
-    -- 汇总字段补 0（30/50无）
-    0                                                                               AS total_sum,
-    0                                                                               AS total_sum_copy,
-    
-    -- ================= 系统字段 =================
-    -- 日期时间类型 (datetime)：场景一
-    COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
-    'wd_sales_30'                                                                   AS source_table,
-    NOW()                                                                           AS insert_date,
-    NOW()                                                                           AS update_date
-FROM feishu.wd_sales_30
-WHERE record_id IS NOT NULL;
-
-
-
--- wd_sales_50 与 wd_sales_30 结构完全相同，重复上述INSERT，source_table改为'wd_sales_50'
--- INSERT INTO feishu_dwd.dwd_feishu_sales_wd_d ... SELECT ... FROM wd_sales_50 ... 'wd_sales_50' AS source_table, NOW(), NOW();
-
--- 注：wd_sales_01~05, 07~22, 24~29, 31~49 的具体结构需根据实际分表确认，
---     若与06/23/30/50之一相同，则套用对应模板；若结构有差异，按超集对齐原则补NULL。
---     先用 information_schema 确认每张分表的实际字段数：
---     SELECT table_name, COUNT(*) AS col_cnt 
---     FROM information_schema.columns 
---     WHERE table_name LIKE 'wd_sales_%' AND table_schema = DATABASE()
---     GROUP BY table_name ORDER BY table_name;
-
--- 验证：行数核验 + 去重检查
--- SELECT COUNT(*) FROM feishu_dwd.dwd_feishu_sales_wd_d;  -- 应等于50张分表记录总和
--- SELECT record_id, COUNT(*) FROM feishu_dwd.dwd_feishu_sales_wd_d GROUP BY record_id HAVING COUNT(*) > 1;  -- 检查重复
-
--- ============================================================
--- 方案二：视图（feishu_dwd.v_feishu_sales_wd_d）
--- 不落物化表，查询时实时UNION ALL 50张分表（结构对齐）
--- 适用：数据探查、低频查询、节省存储；不适合高频分析场景
--- ============================================================
-DROP VIEW IF EXISTS feishu_dwd.v_feishu_sales_wd_d;
-CREATE VIEW feishu_dwd.v_feishu_sales_wd_d AS
-
--- ==========================================
--- 类型A：wd_sales_06 (最全，包含所有字段)
--- ==========================================
-SELECT
-    id                                                                              AS id,
-    -- 字符串类型 (varchar)：保留 TRIM 和 NULLIF
-    COALESCE(NULLIF(TRIM(record_id), ''), 'None')                                   AS record_id,
-    '韦德'                                                                           AS brand,
-    COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                         AS sku,
-    
-    -- 日期时间类型 (datetime)：场景一，去除 TRIM 和 NULLIF
-    COALESCE(DATE(销售日期), DATE('1970-01-01'))                                    AS sales_date,
-    
-    COALESCE(NULLIF(TRIM(款号), ''), 'None')                                        AS style_no,
-    COALESCE(NULLIF(TRIM(尺码), ''), 'None')                                        AS size,
-    
-    -- 日期时间类型 (datetime)：场景一，去除 TRIM 和 NULLIF
-    COALESCE(DATE(首次销售日期), DATE('1970-01-01'))                                AS first_sales_date,
-    
-    COALESCE(NULLIF(TRIM(销售周期所属周), ''), 'None')                              AS sales_week,
-    
-    -- ================= 8个销售指标 =================
-    -- VARCHAR 转 BIGINT：场景二，先转 DECIMAL 再 ROUND 转 BIGINT
-    COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货1`), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0) AS order_replenish_1,
-    COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货`), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)  AS order_replenish,
-    COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际总销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)   AS actual_total_qty,
-    COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计销售周期天数), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0) AS est_cycle_days,
-    COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计周销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)    AS est_week_qty,
-    
-    -- DECIMAL 转 BIGINT：场景一，直接 ROUND 转 BIGINT
-    COALESCE(CAST(ROUND(预计销量, 0) AS BIGINT), 0)                                 AS est_qty,
-    
-    -- VARCHAR 转 BIGINT：场景二
-    COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际周销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)    AS actual_week_qty,
-    
-    -- DECIMAL 转 BIGINT：场景一
-    COALESCE(CAST(ROUND(实际销量, 0) AS BIGINT), 0)                                 AS actual_qty,
-    
-    -- ================= 18个渠道销量 =================
-    -- DECIMAL 转 BIGINT：场景一，直接 ROUND 转 BIGINT，去除 TRIM 和 NULLIF
-    COALESCE(CAST(ROUND(`韦德之道-销量`, 0) AS BIGINT), 0)                          AS qty_wd,
-    COALESCE(CAST(ROUND(`韦德之道寄样-销量`, 0) AS BIGINT), 0)                      AS qty_wd_sample,
-    COALESCE(CAST(ROUND(`得物APP_韦德-销量`, 0) AS BIGINT), 0)                      AS qty_dewu,
-    COALESCE(CAST(ROUND(`韦德之道-得物寄售-销量`, 0) AS BIGINT), 0)                 AS qty_dewu_consign,
-    COALESCE(CAST(ROUND(`得物APP转寄_95分-销量`, 0) AS BIGINT), 0)                  AS qty_95fen,
-    COALESCE(CAST(ROUND(`广东炫动商贸有限公司(李宁客户)-销量`, 0) AS BIGINT), 0)    AS qty_guangdong,
-    COALESCE(CAST(ROUND(`全勇分销-销量`, 0) AS BIGINT), 0)                          AS qty_quanyong,
-    COALESCE(CAST(ROUND(`应科迪_客户-销量`, 0) AS BIGINT), 0)                       AS qty_yingkedi,
-    COALESCE(CAST(ROUND(`韦德线下店铺-销量`, 0) AS BIGINT), 0)                      AS qty_offline,
-    COALESCE(CAST(ROUND(`韦德日本站-销量`, 0) AS BIGINT), 0)                        AS qty_japan,
-    COALESCE(CAST(ROUND(`韦德西语站-销量`, 0) AS BIGINT), 0)                        AS qty_spanish,
-    COALESCE(CAST(ROUND(`dw_韦德伟宏店-销量`, 0) AS BIGINT), 0)                     AS qty_weihong,
-    COALESCE(CAST(ROUND(`韦德_95分店-销量`, 0) AS BIGINT), 0)                       AS qty_95fen_shop,
-    COALESCE(CAST(ROUND(`拼多多_博耶运动户外专营店-销量`, 0) AS BIGINT), 0)         AS qty_pdd,
-    COALESCE(CAST(ROUND(`eBay-销量`, 0) AS BIGINT), 0)                              AS qty_ebay,
-    COALESCE(CAST(ROUND(`韦德之道--招待费-销量`, 0) AS BIGINT), 0)                  AS qty_entertainment,
-    COALESCE(CAST(ROUND(`韦德德国站-销量`, 0) AS BIGINT), 0)                        AS qty_germany,
-    COALESCE(CAST(ROUND(`韦德之道B2B-销量`, 0) AS BIGINT), 0)                       AS qty_b2b,
-    
-    -- ================= 18个渠道金额 =================
-    -- DECIMAL 转 DECIMAL(18,6)：场景一，直接 CAST 控制精度，去除 TRIM 和 NULLIF
-    COALESCE(CAST(`韦德之道-金额` AS DECIMAL(18,6)), 0)                             AS amt_wd,
-    COALESCE(CAST(`韦德之道寄样-金额` AS DECIMAL(18,6)), 0)                         AS amt_wd_sample,
-    COALESCE(CAST(`得物APP_韦德-金额` AS DECIMAL(18,6)), 0)                         AS amt_dewu,
-    COALESCE(CAST(`韦德之道-得物寄售-金额` AS DECIMAL(18,6)), 0)                    AS amt_dewu_consign,
-    COALESCE(CAST(`得物APP转寄_95分-金额` AS DECIMAL(18,6)), 0)                     AS amt_95fen,
-    COALESCE(CAST(`广东炫动商贸有限公司(李宁客户)-金额` AS DECIMAL(18,6)), 0)       AS amt_guangdong,
-    COALESCE(CAST(`全勇分销-金额` AS DECIMAL(18,6)), 0)                             AS amt_quanyong,
-    COALESCE(CAST(`应科迪_客户-金额` AS DECIMAL(18,6)), 0)                          AS amt_yingkedi,
-    COALESCE(CAST(`韦德线下店铺-金额` AS DECIMAL(18,6)), 0)                         AS amt_offline,
-    COALESCE(CAST(`韦德日本站-金额` AS DECIMAL(18,6)), 0)                           AS amt_japan,
-    COALESCE(CAST(`韦德西语站-金额` AS DECIMAL(18,6)), 0)                           AS amt_spanish,
-    COALESCE(CAST(`dw_韦德伟宏店-金额` AS DECIMAL(18,6)), 0)                        AS amt_weihong,
-    COALESCE(CAST(`韦德_95分店-金额` AS DECIMAL(18,6)), 0)                          AS amt_95fen_shop,
-    COALESCE(CAST(`拼多多_博耶运动户外专营店-金额` AS DECIMAL(18,6)), 0)            AS amt_pdd,
-    COALESCE(CAST(`eBay-金额` AS DECIMAL(18,6)), 0)                                 AS amt_ebay,
-    COALESCE(CAST(`韦德之道--招待费-金额` AS DECIMAL(18,6)), 0)                     AS amt_entertainment,
-    COALESCE(CAST(`韦德德国站-金额` AS DECIMAL(18,6)), 0)                           AS amt_germany,
-    COALESCE(CAST(`韦德之道B2B-金额` AS DECIMAL(18,6)), 0)                          AS amt_b2b,
-    
-    -- ================= 汇总与系统字段 =================
-    -- VARCHAR 转 DECIMAL：场景二，保留 TRIM 和 NULLIF
-    COALESCE(CAST(NULLIF(TRIM(`总和`), '') AS DECIMAL(18,6)), 0)                    AS total_sum,
-    -- DECIMAL 转 DECIMAL：场景一，去除 TRIM 和 NULLIF
-    COALESCE(CAST(`总和 副本` AS DECIMAL(18,6)), 0)                                 AS total_sum_copy,
-    
-    -- 日期时间类型 (datetime)：场景一
-    COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
-    'wd_sales_06'                                                                   AS source_table,
-    COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS insert_date,
-    COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS update_date
-FROM feishu.wd_sales_06 
-WHERE record_id IS NOT NULL
-
-UNION ALL
-
--- ==========================================
--- 类型B：wd_sales_23 (缺失7个销售指标，补0)
--- ==========================================
-SELECT
-    id                                                                              AS id,
-    COALESCE(NULLIF(TRIM(record_id), ''), 'None')                                   AS record_id,
-    '韦德'                                                                           AS brand,
-    COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                         AS sku,
-    
-    -- 日期时间类型 (datetime)：场景一
-    COALESCE(DATE(销售日期), DATE('1970-01-01'))                                    AS sales_date,
-    
-    COALESCE(NULLIF(TRIM(款号), ''), 'None')                                        AS style_no,
-    COALESCE(NULLIF(TRIM(尺码), ''), 'None')                                        AS size,
-    COALESCE(DATE(首次销售日期), DATE('1970-01-01'))                                AS first_sales_date,
-    COALESCE(NULLIF(TRIM(销售周期所属周), ''), 'None')                              AS sales_week,
-    
-    -- 23分表缺失7个指标补0，保留actual_qty
-    0                                                                               AS order_replenish_1,
-    0                                                                               AS order_replenish,
-    0                                                                               AS actual_total_qty,
-    0                                                                               AS est_cycle_days,
-    0                                                                               AS est_week_qty,
-    0                                                                               AS est_qty,
-    0                                                                               AS actual_week_qty,
-    
-    -- 23分表"实际销量"为varchar，需CAST：场景二
-    COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0) AS actual_qty,
-    
-    -- 18个渠道销量 (DECIMAL -> BIGINT，场景一)
-    COALESCE(CAST(ROUND(`韦德之道-销量`, 0) AS BIGINT), 0)                          AS qty_wd,
-    COALESCE(CAST(ROUND(`韦德之道寄样-销量`, 0) AS BIGINT), 0)                      AS qty_wd_sample,
-    COALESCE(CAST(ROUND(`得物APP_韦德-销量`, 0) AS BIGINT), 0)                      AS qty_dewu,
-    COALESCE(CAST(ROUND(`韦德之道-得物寄售-销量`, 0) AS BIGINT), 0)                 AS qty_dewu_consign,
-    COALESCE(CAST(ROUND(`得物APP转寄_95分-销量`, 0) AS BIGINT), 0)                  AS qty_95fen,
-    COALESCE(CAST(ROUND(`广东炫动商贸有限公司(李宁客户)-销量`, 0) AS BIGINT), 0)    AS qty_guangdong,
-    COALESCE(CAST(ROUND(`全勇分销-销量`, 0) AS BIGINT), 0)                          AS qty_quanyong,
-    COALESCE(CAST(ROUND(`应科迪_客户-销量`, 0) AS BIGINT), 0)                       AS qty_yingkedi,
-    COALESCE(CAST(ROUND(`韦德线下店铺-销量`, 0) AS BIGINT), 0)                      AS qty_offline,
-    COALESCE(CAST(ROUND(`韦德日本站-销量`, 0) AS BIGINT), 0)                        AS qty_japan,
-    COALESCE(CAST(ROUND(`韦德西语站-销量`, 0) AS BIGINT), 0)                        AS qty_spanish,
-    COALESCE(CAST(ROUND(`dw_韦德伟宏店-销量`, 0) AS BIGINT), 0)                     AS qty_weihong,
-    COALESCE(CAST(ROUND(`韦德_95分店-销量`, 0) AS BIGINT), 0)                       AS qty_95fen_shop,
-    COALESCE(CAST(ROUND(`拼多多_博耶运动户外专营店-销量`, 0) AS BIGINT), 0)         AS qty_pdd,
-    COALESCE(CAST(ROUND(`eBay-销量`, 0) AS BIGINT), 0)                              AS qty_ebay,
-    COALESCE(CAST(ROUND(`韦德之道--招待费-销量`, 0) AS BIGINT), 0)                  AS qty_entertainment,
-    COALESCE(CAST(ROUND(`韦德德国站-销量`, 0) AS BIGINT), 0)                        AS qty_germany,
-    COALESCE(CAST(ROUND(`韦德之道B2B-销量`, 0) AS BIGINT), 0)                       AS qty_b2b,
-    
-    -- 18个渠道金额 (DECIMAL -> DECIMAL，场景一)
-    COALESCE(CAST(`韦德之道-金额` AS DECIMAL(18,6)), 0)                             AS amt_wd,
-    COALESCE(CAST(`韦德之道寄样-金额` AS DECIMAL(18,6)), 0)                         AS amt_wd_sample,
-    COALESCE(CAST(`得物APP_韦德-金额` AS DECIMAL(18,6)), 0)                         AS amt_dewu,
-    COALESCE(CAST(`韦德之道-得物寄售-金额` AS DECIMAL(18,6)), 0)                    AS amt_dewu_consign,
-    COALESCE(CAST(`得物APP转寄_95分-金额` AS DECIMAL(18,6)), 0)                     AS amt_95fen,
-    COALESCE(CAST(`广东炫动商贸有限公司(李宁客户)-金额` AS DECIMAL(18,6)), 0)       AS amt_guangdong,
-    COALESCE(CAST(`全勇分销-金额` AS DECIMAL(18,6)), 0)                             AS amt_quanyong,
-    COALESCE(CAST(`应科迪_客户-金额` AS DECIMAL(18,6)), 0)                          AS amt_yingkedi,
-    COALESCE(CAST(`韦德线下店铺-金额` AS DECIMAL(18,6)), 0)                         AS amt_offline,
-    COALESCE(CAST(`韦德日本站-金额` AS DECIMAL(18,6)), 0)                           AS amt_japan,
-    COALESCE(CAST(`韦德西语站-金额` AS DECIMAL(18,6)), 0)                           AS amt_spanish,
-    COALESCE(CAST(`dw_韦德伟宏店-金额` AS DECIMAL(18,6)), 0)                        AS amt_weihong,
-    COALESCE(CAST(`韦德_95分店-金额` AS DECIMAL(18,6)), 0)                          AS amt_95fen_shop,
-    COALESCE(CAST(`拼多多_博耶运动户外专营店-金额` AS DECIMAL(18,6)), 0)            AS amt_pdd,
-    COALESCE(CAST(`eBay-金额` AS DECIMAL(18,6)), 0)                                 AS amt_ebay,
-    COALESCE(CAST(`韦德之道--招待费-金额` AS DECIMAL(18,6)), 0)                     AS amt_entertainment,
-    COALESCE(CAST(`韦德德国站-金额` AS DECIMAL(18,6)), 0)                           AS amt_germany,
-    COALESCE(CAST(`韦德之道B2B-金额` AS DECIMAL(18,6)), 0)                          AS amt_b2b,
-    
-    -- 汇总与系统字段 (23缺总和副本)
-    -- VARCHAR 转 DECIMAL：场景二
-    COALESCE(CAST(NULLIF(TRIM(`总和`), '') AS DECIMAL(18,6)), 0)                    AS total_sum,
-    0                                                                               AS total_sum_copy,
-    
-    COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
-    'wd_sales_23'                                                                   AS source_table,
-    COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS insert_date,
-    COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS update_date
-FROM feishu.wd_sales_23 
-WHERE record_id IS NOT NULL
-
-UNION ALL
-
--- ==========================================
--- 类型C：wd_sales_30 (精简版，缺失字段全补默认值)
--- ==========================================
-SELECT
-    id                                                                              AS id,
-    COALESCE(NULLIF(TRIM(record_id), ''), 'None')                                   AS record_id,
-    '韦德'                                                                           AS brand,
-    COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                         AS sku,
-    
-    -- 日期时间类型 (datetime)：场景一
-    COALESCE(DATE(销售日期), DATE('1970-01-01'))                                    AS sales_date,
-    
-    'None'                                                                          AS style_no,
-    'None'                                                                          AS size,
-    DATE('1970-01-01')                                                              AS first_sales_date,
-    'None'                                                                          AS sales_week,
-    
-    -- 8个销售指标全缺失补0
-    0                                                                               AS order_replenish_1,
-    0                                                                               AS order_replenish,
-    0                                                                               AS actual_total_qty,
-    0                                                                               AS est_cycle_days,
-    0                                                                               AS est_week_qty,
-    0                                                                               AS est_qty,
-    0                                                                               AS actual_week_qty,
-    0                                                                               AS actual_qty,
-    
-    -- 18个渠道销量 (DECIMAL -> BIGINT，场景一)
-    COALESCE(CAST(ROUND(`韦德之道-销量`, 0) AS BIGINT), 0)                          AS qty_wd,
-    COALESCE(CAST(ROUND(`韦德之道寄样-销量`, 0) AS BIGINT), 0)                      AS qty_wd_sample,
-    COALESCE(CAST(ROUND(`得物APP_韦德-销量`, 0) AS BIGINT), 0)                      AS qty_dewu,
-    COALESCE(CAST(ROUND(`韦德之道-得物寄售-销量`, 0) AS BIGINT), 0)                 AS qty_dewu_consign,
-    COALESCE(CAST(ROUND(`得物APP转寄_95分-销量`, 0) AS BIGINT), 0)                  AS qty_95fen,
-    COALESCE(CAST(ROUND(`广东炫动商贸有限公司(李宁客户)-销量`, 0) AS BIGINT), 0)    AS qty_guangdong,
-    COALESCE(CAST(ROUND(`全勇分销-销量`, 0) AS BIGINT), 0)                          AS qty_quanyong,
-    COALESCE(CAST(ROUND(`应科迪_客户-销量`, 0) AS BIGINT), 0)                       AS qty_yingkedi,
-    COALESCE(CAST(ROUND(`韦德线下店铺-销量`, 0) AS BIGINT), 0)                      AS qty_offline,
-    COALESCE(CAST(ROUND(`韦德日本站-销量`, 0) AS BIGINT), 0)                        AS qty_japan,
-    COALESCE(CAST(ROUND(`韦德西语站-销量`, 0) AS BIGINT), 0)                        AS qty_spanish,
-    COALESCE(CAST(ROUND(`dw_韦德伟宏店-销量`, 0) AS BIGINT), 0)                     AS qty_weihong,
-    COALESCE(CAST(ROUND(`韦德_95分店-销量`, 0) AS BIGINT), 0)                       AS qty_95fen_shop,
-    COALESCE(CAST(ROUND(`拼多多_博耶运动户外专营店-销量`, 0) AS BIGINT), 0)         AS qty_pdd,
-    COALESCE(CAST(ROUND(`eBay-销量`, 0) AS BIGINT), 0)                              AS qty_ebay,
-    COALESCE(CAST(ROUND(`韦德之道--招待费-销量`, 0) AS BIGINT), 0)                  AS qty_entertainment,
-    COALESCE(CAST(ROUND(`韦德德国站-销量`, 0) AS BIGINT), 0)                        AS qty_germany,
-    COALESCE(CAST(ROUND(`韦德之道B2B-销量`, 0) AS BIGINT), 0)                       AS qty_b2b,
-    
-    -- 18个渠道金额 (DECIMAL -> DECIMAL，场景一)
-    COALESCE(CAST(`韦德之道-金额` AS DECIMAL(18,6)), 0)                             AS amt_wd,
-    COALESCE(CAST(`韦德之道寄样-金额` AS DECIMAL(18,6)), 0)                         AS amt_wd_sample,
-    COALESCE(CAST(`得物APP_韦德-金额` AS DECIMAL(18,6)), 0)                         AS amt_dewu,
-    COALESCE(CAST(`韦德之道-得物寄售-金额` AS DECIMAL(18,6)), 0)                    AS amt_dewu_consign,
-    COALESCE(CAST(`得物APP转寄_95分-金额` AS DECIMAL(18,6)), 0)                     AS amt_95fen,
-    COALESCE(CAST(`广东炫动商贸有限公司(李宁客户)-金额` AS DECIMAL(18,6)), 0)       AS amt_guangdong,
-    COALESCE(CAST(`全勇分销-金额` AS DECIMAL(18,6)), 0)                             AS amt_quanyong,
-    COALESCE(CAST(`应科迪_客户-金额` AS DECIMAL(18,6)), 0)                          AS amt_yingkedi,
-    COALESCE(CAST(`韦德线下店铺-金额` AS DECIMAL(18,6)), 0)                         AS amt_offline,
-    COALESCE(CAST(`韦德日本站-金额` AS DECIMAL(18,6)), 0)                           AS amt_japan,
-    COALESCE(CAST(`韦德西语站-金额` AS DECIMAL(18,6)), 0)                           AS amt_spanish,
-    COALESCE(CAST(`dw_韦德伟宏店-金额` AS DECIMAL(18,6)), 0)                        AS amt_weihong,
-    COALESCE(CAST(`韦德_95分店-金额` AS DECIMAL(18,6)), 0)                          AS amt_95fen_shop,
-    COALESCE(CAST(`拼多多_博耶运动户外专营店-金额` AS DECIMAL(18,6)), 0)            AS amt_pdd,
-    COALESCE(CAST(`eBay-金额` AS DECIMAL(18,6)), 0)                                 AS amt_ebay,
-    COALESCE(CAST(`韦德之道--招待费-金额` AS DECIMAL(18,6)), 0)                     AS amt_entertainment,
-    COALESCE(CAST(`韦德德国站-金额` AS DECIMAL(18,6)), 0)                           AS amt_germany,
-    COALESCE(CAST(`韦德之道B2B-金额` AS DECIMAL(18,6)), 0)                          AS amt_b2b,
-    
-    -- 汇总与系统字段 (30全缺失补0)
-    0                                                                               AS total_sum,
-    0                                                                               AS total_sum_copy,
-    
-    COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
-    'wd_sales_30'                                                                   AS source_table,
-    COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS insert_date,
-    COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS update_date
-FROM feishu.wd_sales_30 
-WHERE record_id IS NOT NULL
-
-UNION ALL
-
--- ==========================================
--- 类型D：wd_sales_50 (同30精简版，source_table为50)
--- ==========================================
-SELECT
-    id                                                                              AS id,
-    COALESCE(NULLIF(TRIM(record_id), ''), 'None')                                   AS record_id,
-    '韦德'                                                                           AS brand,
-    COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                         AS sku,
-    
-    -- 日期时间类型 (datetime)：场景一
-    COALESCE(DATE(销售日期), DATE('1970-01-01'))                                    AS sales_date,
-    
-    'None'                                                                          AS style_no,
-    'None'                                                                          AS size,
-    DATE('1970-01-01')                                                              AS first_sales_date,
-    'None'                                                                          AS sales_week,
-    
-    -- 8个销售指标全缺失补0
-    0                                                                               AS order_replenish_1,
-    0                                                                               AS order_replenish,
-    0                                                                               AS actual_total_qty,
-    0                                                                               AS est_cycle_days,
-    0                                                                               AS est_week_qty,
-    0                                                                               AS est_qty,
-    0                                                                               AS actual_week_qty,
-    0                                                                               AS actual_qty,
-    
-    -- 18个渠道销量 (DECIMAL -> BIGINT，场景一)
-    COALESCE(CAST(ROUND(`韦德之道-销量`, 0) AS BIGINT), 0)                          AS qty_wd,
-    COALESCE(CAST(ROUND(`韦德之道寄样-销量`, 0) AS BIGINT), 0)                      AS qty_wd_sample,
-    COALESCE(CAST(ROUND(`得物APP_韦德-销量`, 0) AS BIGINT), 0)                      AS qty_dewu,
-    COALESCE(CAST(ROUND(`韦德之道-得物寄售-销量`, 0) AS BIGINT), 0)                 AS qty_dewu_consign,
-    COALESCE(CAST(ROUND(`得物APP转寄_95分-销量`, 0) AS BIGINT), 0)                  AS qty_95fen,
-    COALESCE(CAST(ROUND(`广东炫动商贸有限公司(李宁客户)-销量`, 0) AS BIGINT), 0)    AS qty_guangdong,
-    COALESCE(CAST(ROUND(`全勇分销-销量`, 0) AS BIGINT), 0)                          AS qty_quanyong,
-    COALESCE(CAST(ROUND(`应科迪_客户-销量`, 0) AS BIGINT), 0)                       AS qty_yingkedi,
-    COALESCE(CAST(ROUND(`韦德线下店铺-销量`, 0) AS BIGINT), 0)                      AS qty_offline,
-    COALESCE(CAST(ROUND(`韦德日本站-销量`, 0) AS BIGINT), 0)                        AS qty_japan,
-    COALESCE(CAST(ROUND(`韦德西语站-销量`, 0) AS BIGINT), 0)                        AS qty_spanish,
-    COALESCE(CAST(ROUND(`dw_韦德伟宏店-销量`, 0) AS BIGINT), 0)                     AS qty_weihong,
-    COALESCE(CAST(ROUND(`韦德_95分店-销量`, 0) AS BIGINT), 0)                       AS qty_95fen_shop,
-    COALESCE(CAST(ROUND(`拼多多_博耶运动户外专营店-销量`, 0) AS BIGINT), 0)         AS qty_pdd,
-    COALESCE(CAST(ROUND(`eBay-销量`, 0) AS BIGINT), 0)                              AS qty_ebay,
-    COALESCE(CAST(ROUND(`韦德之道--招待费-销量`, 0) AS BIGINT), 0)                  AS qty_entertainment,
-    COALESCE(CAST(ROUND(`韦德德国站-销量`, 0) AS BIGINT), 0)                        AS qty_germany,
-    COALESCE(CAST(ROUND(`韦德之道B2B-销量`, 0) AS BIGINT), 0)                       AS qty_b2b,
-    
-    -- 18个渠道金额 (DECIMAL -> DECIMAL，场景一)
-    COALESCE(CAST(`韦德之道-金额` AS DECIMAL(18,6)), 0)                             AS amt_wd,
-    COALESCE(CAST(`韦德之道寄样-金额` AS DECIMAL(18,6)), 0)                         AS amt_wd_sample,
-    COALESCE(CAST(`得物APP_韦德-金额` AS DECIMAL(18,6)), 0)                         AS amt_dewu,
-    COALESCE(CAST(`韦德之道-得物寄售-金额` AS DECIMAL(18,6)), 0)                    AS amt_dewu_consign,
-    COALESCE(CAST(`得物APP转寄_95分-金额` AS DECIMAL(18,6)), 0)                     AS amt_95fen,
-    COALESCE(CAST(`广东炫动商贸有限公司(李宁客户)-金额` AS DECIMAL(18,6)), 0)       AS amt_guangdong,
-    COALESCE(CAST(`全勇分销-金额` AS DECIMAL(18,6)), 0)                             AS amt_quanyong,
-    COALESCE(CAST(`应科迪_客户-金额` AS DECIMAL(18,6)), 0)                          AS amt_yingkedi,
-    COALESCE(CAST(`韦德线下店铺-金额` AS DECIMAL(18,6)), 0)                         AS amt_offline,
-    COALESCE(CAST(`韦德日本站-金额` AS DECIMAL(18,6)), 0)                           AS amt_japan,
-    COALESCE(CAST(`韦德西语站-金额` AS DECIMAL(18,6)), 0)                           AS amt_spanish,
-    COALESCE(CAST(`dw_韦德伟宏店-金额` AS DECIMAL(18,6)), 0)                        AS amt_weihong,
-    COALESCE(CAST(`韦德_95分店-金额` AS DECIMAL(18,6)), 0)                          AS amt_95fen_shop,
-    COALESCE(CAST(`拼多多_博耶运动户外专营店-金额` AS DECIMAL(18,6)), 0)            AS amt_pdd,
-    COALESCE(CAST(`eBay-金额` AS DECIMAL(18,6)), 0)                                 AS amt_ebay,
-    COALESCE(CAST(`韦德之道--招待费-金额` AS DECIMAL(18,6)), 0)                     AS amt_entertainment,
-    COALESCE(CAST(`韦德德国站-金额` AS DECIMAL(18,6)), 0)                           AS amt_germany,
-    COALESCE(CAST(`韦德之道B2B-金额` AS DECIMAL(18,6)), 0)                          AS amt_b2b,
-    
-    -- 汇总与系统字段 (50全缺失补0)
-    0                                                                               AS total_sum,
-    0                                                                               AS total_sum_copy,
-    
-    COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
-    'wd_sales_50'                                                                   AS source_table,
-    COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS insert_date,
-    COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS update_date
-FROM feishu.wd_sales_50 
-WHERE record_id IS NOT NULL;
-
--- wd_sales_50 同 wd_sales_30，UNION ALL 时 source_table 改为 'wd_sales_50'
 ```
 
 ### 4.3 DWD-3：统一销售日明细表（长表，渠道转行）
