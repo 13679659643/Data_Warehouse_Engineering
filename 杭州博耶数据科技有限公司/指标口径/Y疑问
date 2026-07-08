@@ -1,3 +1,11 @@
-1、SKU是从库存表取值还是销售表，是否过来为null的数据。
-2、SKC如何取值？SKC是款号+配色
-3、
+1、SKU是从库存表取值还是销售表wd_shop，是否过来为null的数据？
+2、SKC如何取值？SKC是款号+配色？wd_shop的款号字段?
+3、只关注韦德的四个渠道：韦德之道-销量、韦德日本站-销量、韦德西语站-销量、韦德德国站-销量（4个站销量的总和）？
+4、361品牌的first_sales_date需要预计算？
+5、只研究有first_sales_date的SKU吧，没有first_sales_date的SKU无法计算(first_sales_date)之前的销量？
+
+
+
+
+
+

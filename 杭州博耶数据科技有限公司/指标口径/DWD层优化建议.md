@@ -3,10 +3,11 @@
 > 编写日期：2026-07-05
 > 审查对象：`杭州博耶数据科技有限公司/库存销售计划/DWD.md`（DWD 层解决方案文档）
 > 参考依据：
+>
 > - `指标口径/基于DWD层的字段口径定义.md`（2026-07-05 修订版）
 > - `指标口径/新品-热销-清货期销售分析-最终效果页.md`（Excel 业务口径原文件）
-> 适用范围：361品牌 + 韦德品牌，SKU / SKC 维度
-> 审查人：数仓架构专家
+>   适用范围：361品牌 + 韦德品牌，SKU / SKC 维度
+>   审查人：数仓架构专家
 
 ---
 
@@ -16,16 +17,16 @@
 
 本次审查覆盖 DWD.md 中定义的 8 张表：
 
-| 表编号 | 表名 | 粒度 | 重点关注项 |
-|--------|------|------|------------|
-| DWD-1 | `dwd_feishu_sales_361_d` | 品牌+SKU+销售日期+渠道 | 361 宽表合并 |
-| DWD-2 | `dwd_feishu_sales_wd_d` | 品牌+SKU+销售日期+渠道 | 韦德 18 渠道宽表，结构差异对齐 |
-| DWD-3 | `dwd_feishu_sales_all_d` | 品牌+SKU+销售日期+渠道（长表） | first_sales_date 处理、shelf_date 缺失 |
-| DWD-4 | `dwd_feishu_product_wd_d` | SKU | 韦德特有字段（is_replenish 等） |
-| DWD-5 | `dwd_feishu_product_361_d` | SKU | 361 actual_shelf_date 映射 |
-| DWD-6 | `dwd_feishu_product_all_d` | SKU+品牌 | 字段统一、特有字段丢失 |
-| DWD-7 | `dwd_feishu_inventory_wdpinpai_d` | SKU+更新日期 | 仅韦德有，361 缺失 |
-| DWD-8 | `dwd_feishu_otb_wd_d` | IP+年度 | OTB 双字段语义 |
+| 表编号 | 表名                                | 粒度                           | 重点关注项                             |
+| ------ | ----------------------------------- | ------------------------------ | -------------------------------------- |
+| DWD-1  | `dwd_feishu_sales_361_d`          | 品牌+SKU+销售日期+渠道         | 361 宽表合并                           |
+| DWD-2  | `dwd_feishu_sales_wd_d`           | 品牌+SKU+销售日期+渠道         | 韦德 18 渠道宽表，结构差异对齐         |
+| DWD-3  | `dwd_feishu_sales_all_d`          | 品牌+SKU+销售日期+渠道（长表） | first_sales_date 处理、shelf_date 缺失 |
+| DWD-4  | `dwd_feishu_product_wd_d`         | SKU                            | 韦德特有字段（is_replenish 等）        |
+| DWD-5  | `dwd_feishu_product_361_d`        | SKU                            | 361 actual_shelf_date 映射             |
+| DWD-6  | `dwd_feishu_product_all_d`        | SKU+品牌                       | 字段统一、特有字段丢失                 |
+| DWD-7  | `dwd_feishu_inventory_wdpinpai_d` | SKU+更新日期                   | 仅韦德有，361 缺失                     |
+| DWD-8  | `dwd_feishu_otb_wd_d`             | IP+年度                        | OTB 双字段语义                         |
 
 ### 1.2 总体评价
 
@@ -43,11 +44,11 @@ DWD.md 整体方案已较完善：
 
 ### 1.3 问题严重度分布
 
-| 严重度 | 数量 | 说明 |
-|--------|------|------|
-| 🔴 高 | 4 | 影响 361 品牌 1~180 天分析、达成比例计算等核心指标 |
-| 🟡 中 | 5 | 影响字段完整性、ETL 健壮性、查询性能 |
-| 🟢 低 | 3 | 优化建议，非阻塞性问题 |
+| 严重度 | 数量 | 说明                                               |
+| ------ | ---- | -------------------------------------------------- |
+| 🔴 高  | 4    | 影响 361 品牌 1~180 天分析、达成比例计算等核心指标 |
+| 🟡 中  | 5    | 影响字段完整性、ETL 健壮性、查询性能               |
+| 🟢 低  | 3    | 优化建议，非阻塞性问题                             |
 
 ---
 
@@ -58,6 +59,7 @@ DWD.md 整体方案已较完善：
 #### 问题 1.1【🟡 中】DWD-3 销售明细表 361 品牌 first_sales_date 兜底值不一致
 
 **问题描述**：
+
 - DWD-3 `dwd_feishu_sales_all_d` 表中 361 品牌的 `first_sales_date` 在不同位置处理方式不一致：
   - 字段 COMMENT（DWD.md 第 1059 行）：`"首次销售日期(361为1970-01-01)"`
   - 注释说明（DWD.md 第 1085 行）：`"注：361系列无 first_sales_date，该字段置 NULL"`
@@ -65,6 +67,7 @@ DWD.md 整体方案已较完善：
 - 而字段口径定义文档（1.1 节）明确写：`first_sales_date DATE 首次销售日期（361为1970-01-01）`
 
 **影响分析**：
+
 - 兜底值 `1970-01-01` 与 NULL 在下游计算时行为不同：
   - `DATEDIFF(CURRENT_DATE(), '1970-01-01')` 会得到 20000+ 天的脏数据
   - `DATEDIFF(CURRENT_DATE(), NULL)` 返回 NULL，下游可识别
@@ -91,14 +94,16 @@ WHERE qty_361sport <> 0 OR amt_361sport <> 0;
 
 ---
 
-#### 问题 1.2【🔴 高】361 品牌 first_sales_date 是否在 DWD 层预计算
+#### 问题 1.2【!!!已修复🔴 高】361 品牌 first_sales_date 是否在 DWD 层预计算
 
 **问题描述**：
+
 - 字段口径定义 3.5 节明确：361 品牌的 `first_sales_date` 需从销售明细表 `MIN(sales_date)` 计算
 - DWD-6 统一商品库（DWD.md 第 1792 行）对 361 品牌直接置 NULL，未做预计算
 - 字段口径定义 2026-07-05 优化说明称"361 不再强制补充计算"，但 SKC 维度首次销售日期（5.4 节）仍需计算
 
 **影响分析**：
+
 - 虽然已上架天数、销售周期标签、累计销量等核心指标已改为基于 `shelf_date` 计算，361 品牌不依赖 `first_sales_date`
 - 但业务文档仍将 `first_sales_date` 作为"业务参考字段"展示在 QuickBI 报表中
 - 若 361 品牌该字段为 NULL，QuickBI 报表会显示空白，业务方可能误认为数据缺失
@@ -147,11 +152,13 @@ WHERE p.sku IS NOT NULL;
 #### 问题 1.3【🟡 中】DWD-3 销售明细表 first_sales_date 字段冗余
 
 **问题描述**：
+
 - DWD-3 `dwd_feishu_sales_all_d` 长表中保留了 `first_sales_date` 字段（DWD.md 第 1059 行）
 - 但 `first_sales_date` 是 SKU 维度的属性（同一 SKU 在所有销售日期都相同），不应放在销售明细表中
 - 这导致同一 SKU 的所有销售记录都重复存储 `first_sales_date`，造成数据冗余
 
 **影响分析**：
+
 - 存储浪费：450 万行销售明细每行多存一个 DATE 字段（4 字节），约 18MB 冗余
 - 维护困难：若韦德商品库的 `first_sales_date` 更新，需同步更新所有销售明细记录
 - 范式违反：违反第三范式，SKU 属性应放在商品库表，不应冗余到事实表
@@ -195,6 +202,7 @@ PRIMARY KEY(`record_id`, `sales_date`, `channel_code`)
 #### 问题 2.1【🔴 高】DWD-3 销售明细表缺失 shelf_date 字段
 
 **问题描述**：
+
 - 字段口径定义 1.1 节明确指出：DWD-3 `dwd_feishu_sales_all_d` 表**不含 `shelf_date`**（上架日期）
 - 但已上架天数、累计销量、1~180天实际销售等核心指标的计算公式都需要 `shelf_date`：
   - 已上架天数 = `DATEDIFF(CURRENT_DATE(), shelf_date) + 1`
@@ -203,6 +211,7 @@ PRIMARY KEY(`record_id`, `sales_date`, `channel_code`)
 - 这意味着 DWS 层每次计算这些指标都必须 JOIN `dwd_feishu_product_all_d` 表获取 `shelf_date`
 
 **影响分析**：
+
 - DWS 层频繁 JOIN 商品库表，性能开销大
 - 若商品库 shelf_date 更新滞后，销售指标的"上架日期基准"会不一致
 - 业务文档明确"已上架天数 = today()-上架日期+1"，shelf_date 是核心基准字段
@@ -257,6 +266,7 @@ LEFT JOIN feishu_dwd.dwd_feishu_product_all_d p
 #### 问题 2.2【🟢 低】shelf_date 与 actual_shelf_date 的统一映射说明
 
 **问题描述**：
+
 - DWD-6 统一商品库已正确处理 shelf_date 统一映射：
   - 韦德：`wd.shelf_date`（DWD.md 第 1759 行）
   - 361：`actual_shelf_date AS shelf_date`（DWD.md 第 1791 行）
@@ -276,9 +286,10 @@ LEFT JOIN feishu_dwd.dwd_feishu_product_all_d p
 
 ### 审查要点 3：DWD-4 韦德商品库特有字段保留问题
 
-#### 问题 3.1【🔴 高】统一商品库未保留 is_replenish、replenish_qty 等关键字段
+#### 问题 3.1【!!!已修复🔴 高】统一商品库未保留 is_replenish、replenish_qty 等关键字段
 
 **问题描述**：
+
 - DWD-6 统一商品库（DWD.md 第 1683 行注释）明确去除以下韦德特有字段：
   - `is_replenish`（是否补货）
   - `replenish_qty`（补货量）
@@ -289,6 +300,7 @@ LEFT JOIN feishu_dwd.dwd_feishu_product_all_d p
 - 字段口径定义 1.4 节已新增 DWD-4 韦德商品库表，建议 DWS 层 LEFT JOIN 获取
 
 **影响分析**：
+
 - 当前方案要求 DWS 层每次计算达成比例都 JOIN DWD-4 表，但 DWD-4 仅含韦德数据
 - 361 品牌无补货概念，分母直接取订货数量，无需 JOIN
 - 这导致 DWS 层 SQL 复杂化：需先判断品牌，韦德才 JOIN DWD-4
@@ -396,6 +408,7 @@ WHERE p.sku IS NOT NULL;
 方案 B（保守）：保留现有 DWD-6 结构不变，DWS 层通过 LEFT JOIN DWD-4 获取这些字段。
 
 **推荐方案 A**，理由：
+
 1. 减少 DWS 层 JOIN 次数，简化 SQL
 2. 统一商品库作为"维度表"应尽量保留所有下游需要的属性字段
 3. 361 品牌置 NULL/默认值，不影响存储成本
@@ -407,6 +420,7 @@ WHERE p.sku IS NOT NULL;
 #### 问题 3.2【🟡 中】sales_cycle_label 字段语义冲突
 
 **问题描述**：
+
 - DWD-4 韦德商品库已有 `sales_cycle_label` 字段（DWD.md 第 1310 行），但 COMMENT 为"销售周期标签"
 - 字段口径定义 3.7 节也有计算字段"销售周期标签"（基于已上架天数划分：新品期/热销期/清货期/超周期）
 - 两者名称相同但语义不同：
@@ -414,17 +428,19 @@ WHERE p.sku IS NOT NULL;
   - 字段口径定义的计算字段：基于 `shelf_date` 和 `CURRENT_DATE()` 动态计算的标签
 
 **影响分析**：
+
 - 下游开发者可能误用 DWD-4 的静态标签，而非动态计算结果
 - 韦德原始标签可能未及时更新，与动态计算结果不一致
 
 **调整建议**：
+
 1. DWD-4 的字段重命名为 `raw_sales_cycle_label`（业务原始录入标签）：
+
 ```sql
 `raw_sales_cycle_label` VARCHAR(100) COMMENT "业务原始销售周期标签(韦德录入,可能滞后,下游应以计算字段为准)",
 ```
 
 2. 若按问题 3.1 方案 A 在 DWD-6 中保留该字段，也使用 `raw_sales_cycle_label` 命名，并明确 COMMENT 警示。
-
 3. 字段口径定义 3.7 节的销售周期标签保持为"计算字段"，DWS 层基于 `shelf_date` 动态计算。
 
 **优先级**：🟡 中（避免字段语义混淆）
@@ -433,13 +449,15 @@ WHERE p.sku IS NOT NULL;
 
 ### 审查要点 4：表结构与字段完整性
 
-#### 问题 4.1【🔴 高】DWD-6 统一商品库缺失 SKU 维度主键设计问题
+#### 问题 4.1【!!!已修复🔴 高】DWD-6 统一商品库缺失 SKU 维度主键设计问题
 
 **问题描述**：
+
 - DWD-6 表主键为 `(sku, brand)`（DWD.md 第 1728 行），但表结构中 `style_no`、`ip`、`series`、`category`、`order_date`、`first_order_quarter` 等 COMMENT 标注为"(主键组成部分)"（第 1705-1719 行）
 - 这与 PRIMARY KEY 定义不一致，COMMENT 误导
 
 **影响分析**：
+
 - COMMENT 错误导致开发者对主键理解混乱
 - 实际主键仅 `(sku, brand)`，其他字段是普通维度列
 
@@ -462,16 +480,19 @@ WHERE p.sku IS NOT NULL;
 #### 问题 4.2【🟡 中】DWD-6 缺失 361 品牌的 color_name 字段处理
 
 **问题描述**：
+
 - DWD-6 表中 361 品牌 `color_name` 直接置 NULL（DWD.md 第 1784 行）
 - 字段口径定义 5.1 节明确：361 品牌 SKC 近似等于 `style_no`（361 业务上款号即近似 SKC）
 - 这意味着 361 品牌无法通过 `style_no + color_name` 组合推导 SKC，需特殊处理
 
 **影响分析**：
+
 - SKC 维度是核心分析维度（业务文档以 SKC 为主键）
 - 361 品牌若无法准确推导 SKC，SKC 维度分析将退化为款号维度
 - 字段口径定义 5.1 节已说明"361 业务上款号即近似 SKC"，但仍可能误导下游
 
 **调整建议**：
+
 1. 在 DWD-6 表 COMMENT 中明确标注 361 品牌 SKC 推导方式：
 
 ```sql
@@ -479,6 +500,7 @@ WHERE p.sku IS NOT NULL;
 ```
 
 2. 建议在 DWS 层新增计算字段 `skc_code`：
+
 ```sql
 -- DWS 层 SKC 推导逻辑
 CASE
@@ -495,18 +517,22 @@ END AS skc_code
 #### 问题 4.3【🟢 低】DWD-2 韦德销售表 order_qty 字段语义不清
 
 **问题描述**：
+
 - DWD-2 `dwd_feishu_sales_wd_d` 表有 `order_qty` 字段（DWD.md 第 404 行），COMMENT 为"订货数量"
 - 字段口径定义 8.2 节问题4 已确认：该字段是 SKU 维度的订货量
 - 但 DWD-4 韦德商品库表有 `order_qty_sku` 和 `order_qty_skc` 两个字段（DWD.md 第 1295-1296 行）
 - DWD-2 的 `order_qty` 来源不明（是 `order_qty_sku` 还是 `order_qty_skc`？）
 
 **影响分析**：
+
 - 字段口径定义 3.15 节明确 DWD-6 的 `order_qty` 统一为 SKU 维度
 - 但 DWD-2 销售明细表中的 `order_qty` 来源未明确说明
 - 可能导致下游误用
 
 **调整建议**：
+
 1. 在 DWD-2 表 COMMENT 中明确字段来源：
+
 ```sql
 `order_qty` BIGINT COMMENT "订货数量(SKU维度,来源wd_sales_06分表,其他分表可能为NULL)",
 ```
@@ -522,14 +548,18 @@ END AS skc_code
 #### 问题 5.1【🔴 高】DWD-3 长表 ETL 中 WHERE 条件过滤导致数据丢失
 
 **问题描述**：
+
 - DWD-3 长表 ETL（DWD.md 第 1096、1103、1110、1117 行等）使用如下过滤：
+
 ```sql
 WHERE qty_361sport <> 0 OR amt_361sport <> 0
 ```
+
 - 这会过滤掉销量和金额都为 0 的记录
 - 但业务上"某天某渠道无销售"是有效信息，应保留为 0 销量记录
 
 **影响分析**：
+
 - 业务文档（最终效果页）显示：实际销售工作表有大量"空"或"0"值记录
 - 若 DWD-3 过滤掉 0 销量记录，下游计算"昨日实际销售"时，无销售的 SKU 会被遗漏
 - 字段口径定义 3.17 节明确：昨日无销售记录时为 0
@@ -551,6 +581,7 @@ WHERE qty_361sport IS NOT NULL OR amt_361sport IS NOT NULL
 方案 B（保守）：维持现状，但在文档中明确说明"DWD-3 仅包含有销售的记录，无销售的 SKU 需从商品库表 LEFT JOIN 获取"。
 
 **推荐方案 A**，理由：
+
 1. 符合业务报表"有 SKU 即展示，无销售显示 0"的逻辑
 2. 简化 DWS 层 SQL，无需额外 LEFT JOIN 补 0
 
@@ -561,17 +592,23 @@ WHERE qty_361sport IS NOT NULL OR amt_361sport IS NOT NULL
 #### 问题 5.2【🟡 中】DWD-2 韦德销售表 ETL 中 first_sales_date 兜底值不一致
 
 **问题描述**：
+
 - DWD-2 韦德销售表 ETL（DWD.md 第 502 行）：
+
 ```sql
 COALESCE(DATE(首次销售日期), DATE('1970-01-01')) AS first_sales_date
 ```
+
 - 韦德商品库 DWD-4 ETL（DWD.md 第 1446 行）：
+
 ```sql
 COALESCE(DATE(首次销售日期), DATE('1970-01-01')) AS first_sales_date
 ```
+
 - 两表都用 `1970-01-01` 兜底，但若 DWD-3 改为 NULL 兜底（见问题 1.1），会导致 DWD-2 和 DWD-3 不一致
 
 **影响分析**：
+
 - 同一字段在不同表中的兜底值不一致，增加下游处理复杂度
 - `1970-01-01` 兜底可能被误用为有效日期参与计算
 
@@ -579,6 +616,7 @@ COALESCE(DATE(首次销售日期), DATE('1970-01-01')) AS first_sales_date
 统一所有表的 `first_sales_date` 兜底策略。推荐两个方案任选其一：
 
 方案 A（推荐）：全部统一为 NULL 兜底
+
 ```sql
 -- DWD-2 韦德销售表
 CAST(DATE(首次销售日期) AS DATE) AS first_sales_date  -- NULL 自动保留
@@ -596,11 +634,13 @@ CAST(DATE(首次销售日期) AS DATE) AS first_sales_date
 #### 问题 5.3【🟡 中】DWD-2 韦德销售表 source_table 字段长度不足
 
 **问题描述**：
+
 - DWD-2 表 `source_table` 字段定义为 `VARCHAR(20)`（DWD.md 第 456 行）
 - 但视图方案中 source_table 值为 `'wd_sales_01'` 等（11 字符），尚可
 - 若未来分表数超过 99（如 `wd_sales_100`），将超过 VARCHAR(20) 长度
 
 **影响分析**：
+
 - 当前不影响，但未来扩展性差
 - DWD-1 361 销售表的 `source_table` 也是 VARCHAR(20)，但 361 分表名格式为 `t_361sales_XX`，最长 14 字符，安全
 
@@ -615,16 +655,20 @@ CAST(DATE(首次销售日期) AS DATE) AS first_sales_date
 
 ---
 
-#### 问题 5.4【🟡 中】DWD-4 韦德商品库 ETL 字段精度风险
+#### 问题 5.4【 ！保留建议 🟡 中】DWD-4 韦德商品库 ETL 字段精度风险
 
 **问题描述**：
+
 - DWD-4 ETL（DWD.md 第 1434-1435 行）使用正则校验过滤非数字字符：
+
 ```sql
 COALESCE(CASE WHEN TRIM(`订货数量(sku)`) REGEXP '^[0-9]+$' THEN CAST(TRIM(`订货数量(sku)`) AS BIGINT) ELSE 0 END, 0) AS order_qty_sku
 ```
+
 - 但 `订货数量(sku)` 可能含小数（如 "100.5"），正则 `^[0-9]+$` 会过滤掉小数，导致数据置 0
 
 **影响分析**：
+
 - 业务上订货数量应为整数，但飞书录入可能存在小数（如 "100.0"）
 - 正则过滤会导致有效数据被误判为 0
 
@@ -638,6 +682,7 @@ COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货数量(SKC)`), '') AS DECIMAL(18,6))
 ```
 
 对所有使用 `REGEXP '^[0-9]+$'` 的字段统一修正，包括：
+
 - `order_qty_sku`、`order_qty_skc`
 - `inventory_sku`、`inventory_skc`、`inventory_total`、`inventory_hz`、`inventory_baoshui`、`inventory_feibao`
 - `official_daily_sales`、`cum_sales_excl_current_week`、`cum_sales_sku`、`cum_sales_skc`、`actual_sales_days`
@@ -649,10 +694,12 @@ COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货数量(SKC)`), '') AS DECIMAL(18,6))
 
 ### 审查要点 6：性能与分区策略
 
-#### 问题 6.1【🔴 高】DWD-3 长表缺失分区配置
+#### 问题 6.1【！保留建议 🔴 高】DWD-3 长表缺失分区配置
 
 **问题描述**：
+
 - DWD-3 `dwd_feishu_sales_all_d` 表（DWD.md 第 1048-1080 行）的 PROPERTIES 中**未配置动态分区**：
+
 ```sql
 PROPERTIES (
     "compression" = "LZ4",
@@ -662,10 +709,12 @@ PROPERTIES (
     "replication_num" = "1"
 );
 ```
+
 - 而 DWD-1、DWD-2 销售表（按 sales_date 分区）应在 PROPERTIES 中配置动态分区参数
 - 文档第三章明确："按销售日期动态分区"，但实际 DDL 中 `PARTITION BY RANGE` 子句缺失，PROPERTIES 中也无 `dynamic_partition.*` 参数
 
 **影响分析**：
+
 - 无动态分区配置，所有历史数据堆积在单一分区，查询性能差
 - 无法自动清理过期数据（如 3 年前的销售记录）
 - 按日期查询无法走分区裁剪，全表扫描 450 万行
@@ -704,14 +753,16 @@ PROPERTIES (
 
 ---
 
-#### 问题 6.2【🟡 中】DWD-3 长表分桶数偏少
+#### 问题 6.2【 ！保留建议 🟡 中】DWD-3 长表分桶数偏少
 
 **问题描述**：
+
 - DWD-3 表分桶数为 16（DWD.md 第 1073 行 `DISTRIBUTED BY HASH(\`record_id\`)`，未指定 BUCKETS）
 - 实际未指定 BUCKETS 数，使用默认值（通常 10）
 - 长表预估 450 万行，单分区数据量约 1.2 万行/天
 
 **影响分析**：
+
 - 分桶数过少，并行度不足，查询性能差
 - 根据规范：单分区数据量 100万~1000万，建议 BUCKETS 16~32
 
@@ -732,13 +783,15 @@ DISTRIBUTED BY HASH(`sku`) BUCKETS 32
 
 ---
 
-#### 问题 6.3【🟢 低】缺少布隆过滤索引配置
+#### 问题 6.3【 ！保留建议 🟢 低】缺少布隆过滤索引配置
 
 **问题描述**：
+
 - 所有 DWD 表均未配置 `bloom_filter_columns`，无法加速 `=` 和 `IN` 查询
 - 销售明细表的高频查询场景：按 `sku`、`brand`、`channel_code` 过滤
 
 **影响分析**：
+
 - 按 SKU 点查时无法利用布隆过滤索引，扫描效率低
 - 商品库表按品牌过滤时同样无法加速
 
@@ -774,12 +827,14 @@ PROPERTIES (
 #### 问题 7.1【🔴 高】361 品牌 inventory_sku 缺失，影响在仓库存指标
 
 **问题描述**：
+
 - DWD-6 统一商品库中 361 品牌的 `inventory_sku` 直接置 NULL（DWD.md 第 1795 行）
 - 字段口径定义 3.8 节明确：在仓库存 = `dwd_feishu_product_all_d.inventory_sku`，空值兜底为 0
 - 字段口径定义 8.1 节确认：361 的 `inventory_sku` 为 NULL，需从其他来源补充或确认是否使用品牌方库存表
 - 但 DWD-7 品牌方库存表仅含韦德数据（来源 `wd_pinpaikucun`），361 无对应数据
 
 **影响分析**：
+
 - 361 品牌的"在仓库存"、"可售周期(天)"指标无法计算
 - 业务报表会显示空白，业务方无法看到 361 库存情况
 - 字段口径定义 5.7 节 SKC 维度在仓库存同样受影响
@@ -793,6 +848,7 @@ COALESCE(NULL, 0) AS inventory_sku,  -- 361无SKU维度库存,暂兜底为0
 ```
 
 并在 DWD-6 表 COMMENT 中补充：
+
 ```sql
 `inventory_sku` BIGINT COMMENT "库存数量(SKU)(韦德有,361暂为0,待确认数据源)",
 ```
@@ -806,16 +862,19 @@ COALESCE(NULL, 0) AS inventory_sku,  -- 361无SKU维度库存,暂兜底为0
 #### 问题 7.2【🟡 中】361 品牌可提库存缺失
 
 **问题描述**：
+
 - 字段口径定义 3.9 节明确：可提库存 = `dwd_feishu_inventory_wdpinpai_d.inventory_qty`
 - 但 DWD-7 品牌方库存表仅含韦德数据（来源 `wd_pinpaikucun`）
 - 字段口径定义 3.9 节明确：361 品牌无品牌方库存数据，该字段为 0
 
 **影响分析**：
+
 - 361 品牌的"可提库存"指标为 0，无法反映实际可提货情况
 - 业务报表 361 品牌该列空白
 
 **调整建议**：
 与问题 7.1 同步处理：
+
 1. 短期：DWS 层 361 品牌可提库存兜底为 0，COMMENT 标注
 2. 长期：与业务方确认 361 品牌库存数据源
 
@@ -826,11 +885,13 @@ COALESCE(NULL, 0) AS inventory_sku,  -- 361无SKU维度库存,暂兜底为0
 #### 问题 7.3【🟢 低】361 品牌的 SKC 推导方式建议沉淀到 DWD 层
 
 **问题描述**：
+
 - 字段口径定义 5.1 节明确：361 品牌 SKC 近似等于 `style_no`
 - 但 DWD-6 统一商品库未提供 `skc_code` 计算字段
 - 每个 DWS 任务都需重复实现 SKC 推导逻辑
 
 **影响分析**：
+
 - DWS 层 SQL 重复代码多
 - 不同任务可能实现不一致
 
@@ -856,38 +917,38 @@ p.style_no AS skc_code,
 
 ### 3.1 高优先级问题（必须修复）
 
-| 问题编号 | 问题简述 | 影响范围 |
-|----------|----------|----------|
-| 1.2 | 361 品牌 first_sales_date 未预计算 | 361 品牌业务参考字段缺失 |
-| 2.1 | DWD-3 销售明细表缺失 shelf_date 字段 | DWS 层核心指标计算性能 |
-| 3.1 | 统一商品库未保留 is_replenish 等字段 | 达成比例计算 |
-| 4.1 | DWD-6 COMMENT 主键标注错误 | 文档准确性 |
-| 5.1 | DWD-3 长表 WHERE 过滤导致 0 销量数据丢失 | 数据完整性 |
-| 6.1 | DWD-3 长表缺失分区配置 | 查询性能、数据生命周期 |
-| 7.1 | 361 品牌 inventory_sku 缺失 | 361 库存指标 |
+| 问题编号 | 问题简述                                 | 影响范围                 |
+| -------- | ---------------------------------------- | ------------------------ |
+| 1.2      | 361 品牌 first_sales_date 未预计算       | 361 品牌业务参考字段缺失 |
+| 2.1      | DWD-3 销售明细表缺失 shelf_date 字段     | DWS 层核心指标计算性能   |
+| 3.1      | 统一商品库未保留 is_replenish 等字段     | 达成比例计算             |
+| 4.1      | DWD-6 COMMENT 主键标注错误               | 文档准确性               |
+| 5.1      | DWD-3 长表 WHERE 过滤导致 0 销量数据丢失 | 数据完整性               |
+| 6.1      | DWD-3 长表缺失分区配置                   | 查询性能、数据生命周期   |
+| 7.1      | 361 品牌 inventory_sku 缺失              | 361 库存指标             |
 
 ### 3.2 中优先级问题（建议修复）
 
-| 问题编号 | 问题简述 | 影响范围 |
-|----------|----------|----------|
-| 1.1 | DWD-3 first_sales_date 兜底值不一致 | 数据语义清晰度 |
-| 1.3 | DWD-3 first_sales_date 字段冗余 | 数据规范化 |
-| 3.2 | sales_cycle_label 字段语义冲突 | 字段语义混淆 |
-| 4.2 | 361 品牌 color_name 缺失，SKC 推导需特殊处理 | SKC 维度分析 |
-| 5.2 | DWD-2 first_sales_date 兜底值不一致 | 数据一致性 |
-| 5.4 | DWD-4 ETL 正则过滤小数导致数据丢失 | 数据准确性 |
-| 6.2 | DWD-3 分桶数偏少 | 查询性能 |
-| 7.2 | 361 品牌可提库存缺失 | 361 库存指标 |
+| 问题编号 | 问题简述                                     | 影响范围       |
+| -------- | -------------------------------------------- | -------------- |
+| 1.1      | DWD-3 first_sales_date 兜底值不一致          | 数据语义清晰度 |
+| 1.3      | DWD-3 first_sales_date 字段冗余              | 数据规范化     |
+| 3.2      | sales_cycle_label 字段语义冲突               | 字段语义混淆   |
+| 4.2      | 361 品牌 color_name 缺失，SKC 推导需特殊处理 | SKC 维度分析   |
+| 5.2      | DWD-2 first_sales_date 兜底值不一致          | 数据一致性     |
+| 5.4      | DWD-4 ETL 正则过滤小数导致数据丢失           | 数据准确性     |
+| 6.2      | DWD-3 分桶数偏少                             | 查询性能       |
+| 7.2      | 361 品牌可提库存缺失                         | 361 库存指标   |
 
 ### 3.3 低优先级问题（可选优化）
 
-| 问题编号 | 问题简述 | 影响范围 |
-|----------|----------|----------|
-| 2.2 | shelf_date COMMENT 补充说明 | 文档完善性 |
-| 4.3 | DWD-2 order_qty 字段语义不清 | 字段语义澄清 |
-| 5.3 | source_table 字段长度不足 | 未来扩展性 |
-| 6.3 | 缺少布隆过滤索引配置 | 性能优化 |
-| 7.3 | 361 品牌 SKC 推导建议沉淀到 DWD 层 | 减少 DWS 重复代码 |
+| 问题编号 | 问题简述                           | 影响范围          |
+| -------- | ---------------------------------- | ----------------- |
+| 2.2      | shelf_date COMMENT 补充说明        | 文档完善性        |
+| 4.3      | DWD-2 order_qty 字段语义不清       | 字段语义澄清      |
+| 5.3      | source_table 字段长度不足          | 未来扩展性        |
+| 6.3      | 缺少布隆过滤索引配置               | 性能优化          |
+| 7.3      | 361 品牌 SKC 推导建议沉淀到 DWD 层 | 减少 DWS 重复代码 |
 
 ---
 
@@ -935,12 +996,12 @@ p.style_no AS skc_code,
 
 以下问题需与业务方确认后才能最终定方案：
 
-| 问题编号 | 待确认事项 |
-|----------|------------|
-| 7.1 | 361 品牌是否有 SKU 维度库存数据源？（ERP/WMS 系统） |
-| 7.2 | 361 品牌是否有品牌方库存数据？是否需要新增 ODS 采集？ |
-| 1.3 | 是否接受 DWD-3 删除 first_sales_date 字段，下游 JOIN 获取？ |
-| 2.1 | 是否接受 DWD-3 新增 shelf_date 退化维度字段？ |
+| 问题编号 | 待确认事项                                                  |
+| -------- | ----------------------------------------------------------- |
+| 7.1      | 361 品牌是否有 SKU 维度库存数据源？（ERP/WMS 系统）         |
+| 7.2      | 361 品牌是否有品牌方库存数据？是否需要新增 ODS 采集？       |
+| 1.3      | 是否接受 DWD-3 删除 first_sales_date 字段，下游 JOIN 获取？ |
+| 2.1      | 是否接受 DWD-3 新增 shelf_date 退化维度字段？               |
 
 ### 4.3 验证方法
 

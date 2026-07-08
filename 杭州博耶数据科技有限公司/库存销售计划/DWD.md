@@ -1702,24 +1702,30 @@ CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_product_all_d (
     `sku`                 VARCHAR(128)     COMMENT "SKU编码(主键组成部分)",
     `brand`               VARCHAR(20)     COMMENT "品牌:361/韦德(主键组成部分)",
     -- 2. 维度列
-    `style_no`            VARCHAR(128)     COMMENT "款号/商品货号(主键组成部分)",
-    `ip`                  VARCHAR(100)     COMMENT "IP(主键组成部分)",
-    `series`              VARCHAR(100)     COMMENT "系列(主键组成部分)",
+    `style_no`            VARCHAR(128)     COMMENT "款号/商品货号",
+    `ip`                  VARCHAR(100)     COMMENT "IP(",
+    `series`              VARCHAR(100)     COMMENT "系列",
     `color_name`          VARCHAR(100)     COMMENT "配色名（韦德有，361为空）",
     `product_name`        VARCHAR(500)    COMMENT "商品名称",
-    `category`            VARCHAR(100)     COMMENT "品类/商品分类(主键组成部分)",
+    `category`            VARCHAR(100)     COMMENT "品类/商品分类",
     `size`                VARCHAR(50)     COMMENT "尺码（韦德码/361美码统一）",
     -- 3. 度量列
     `tag_price`           DECIMAL(18,6)   COMMENT "吊牌价（金额保留6位小数）",
     `order_qty`           BIGINT          COMMENT "订货数量（统一为SKU维度，整数）",
     -- 4. 维度列：订货/上架/销售时间（统一口径）
-    `order_date`          DATE            COMMENT "订货日期(主键组成部分)",
+    `order_date`          DATE            COMMENT "订货日期",
     `shelf_date`          DATE            COMMENT "上架日期（统一口径：韦德取shelf_date，361取actual_shelf_date）",
     `first_sales_date`    DATE            COMMENT "首次销售日期（韦德有，361为空）",
-    `first_order_quarter` VARCHAR(50)     COMMENT "首次订货季度(主键组成部分)",
+    `first_order_quarter` VARCHAR(50)     COMMENT "首次订货季度",
     `year`                VARCHAR(50)     COMMENT "年份（韦德有，361为空）",    
     -- 5. 度量列：库存信息（韦德有详细库存，361为空）
     `inventory_sku`       BIGINT          COMMENT "库存数量(SKU)（韦德有，361为空，整数）",
+    -- ============== 新增：韦德特有字段（361置NULL/默认值） ==============
+    `order_qty_skc`       BIGINT          COMMENT "订货数量(SKC维度)(韦德特有,361为NULL)",
+    `inventory_skc`       BIGINT          COMMENT "库存数量(SKC)(韦德特有,361为NULL)",
+    `sales_cycle_label`   VARCHAR(100)    COMMENT "销售周期标签(韦德特有,361为NULL)",
+    `is_replenish`        VARCHAR(50)     COMMENT "是否补货(韦德特有:是/否,361固定为'否')",
+    `replenish_qty`       BIGINT          COMMENT "补货量(韦德特有,361为0)",
     -- 6. 技术字段
     `sync_time`           DATETIME        COMMENT "ODS同步时间",
     `insert_date`         DATETIME        COMMENT "DWD记录插入时间（ETL写入，增量更新用）",
@@ -1740,8 +1746,9 @@ PROPERTIES (
 INSERT INTO feishu_dwd.dwd_feishu_product_all_d (
     sku, brand, style_no, ip, series, color_name, product_name, category, size,
     tag_price, order_qty, order_date, shelf_date, first_sales_date,
-    first_order_quarter, year, inventory_sku, sync_time,
-    insert_date, update_date
+    first_order_quarter, year, inventory_sku, 
+    order_qty_skc, inventory_skc, sales_cycle_label, is_replenish, replenish_qty,
+    sync_time,insert_date, update_date
 )
 SELECT
     wd.sku, 
@@ -1757,14 +1764,24 @@ SELECT
     wd.order_qty_sku AS order_qty,                                   -- 统一为SKU维度订货量
     wd.order_date,
     wd.shelf_date,                                                   -- 韦德直接取上架日期
-    wd.first_sales_date,
+    COALESCE(fs.first_sales_date, fs.first_sales_date) AS first_sales_date,
     wd.first_order_quarter,
     wd.year,
     wd.inventory_sku,
+        -- 新增字段
+    wd.order_qty_skc, wd.inventory_skc, wd.sales_cycle_label,
+    COALESCE(NULLIF(wd.is_replenish, ''), '否'),
+    COALESCE(wd.replenish_qty, 0),
     wd.sync_time,
     NOW() AS insert_date,                                            -- ETL写入插入时间
     NOW() AS update_date                                             -- ETL写入更新时间
 FROM feishu_dwd.dwd_feishu_product_wd_d wd
+LEFT JOIN (
+    SELECT sku, MIN(sales_date) AS first_sales_date
+    FROM feishu_dwd.dwd_feishu_sales_all_d
+    WHERE brand = '韦德' AND qty > 0
+    GROUP BY sku
+) fs ON wd.sku = fs.sku
 WHERE wd.sku IS NOT NULL;
 
 
@@ -1772,33 +1789,46 @@ WHERE wd.sku IS NOT NULL;
 INSERT INTO feishu_dwd.dwd_feishu_product_all_d (
     sku, brand, style_no, ip, series, color_name, product_name, category, size,
     tag_price, order_qty, order_date, shelf_date, first_sales_date,
-    first_order_quarter, year, inventory_sku, sync_time,
-    insert_date, update_date
+    first_order_quarter, year, inventory_sku, 
+    order_qty_skc, inventory_skc, sales_cycle_label, is_replenish, replenish_qty,
+    sync_time,insert_date, update_date
 )
 SELECT
-    sku                                                                   AS sku,
-    '361'                                                                 AS brand,
-    style_no                                                              AS style_no,
-    ip                                                                    AS ip,
-    series                                                                AS series,
-    NULL                                                                  AS color_name,                                  -- 361无配色名
-    product_name                                                          AS product_name,
-    category                                                              AS category,
-    size_us                                                               AS size,                                        -- 361用美码作为统一尺码
-    tag_price                                                             AS tag_price,
-    order_qty                                                             AS order_qty,
-    order_date                                                            AS order_date,
-    actual_shelf_date                                                     AS shelf_date,                                  -- 361取实际上架时间作为统一上架日期
-    NULL                                                                  AS first_sales_date,                            -- 361商品库无首次销售日期（在销售表中）
-    first_order_quarter                                                   AS first_order_quarter,
-    NULL                                                                  AS year,                                        -- 361商品库无年份字段
-    NULL                                                                  AS inventory_sku,                               -- 361商品库无SKU维度库存
-    sync_time                                                             AS sync_time,
-    NOW()                                                                 AS insert_date,
-    NOW()                                                                 AS update_date
-FROM feishu_dwd.dwd_feishu_product_361_d
-WHERE sku IS NOT NULL;
-
+    p.sku                                                                   AS sku,
+    '361'                                                                   AS brand,
+    p.style_no                                                              AS style_no,
+    p.ip                                                                    AS ip,
+    p.series                                                                AS series,
+    NULL                                                                    AS color_name,                                  -- 361无配色名
+    p.product_name                                                          AS product_name,
+    p.category                                                              AS category,
+    p.size_us                                                               AS size,                                        -- 361用美码作为统一尺码
+    p.tag_price                                                             AS tag_price,
+    p.order_qty                                                             AS order_qty,
+    p.order_date                                                            AS order_date,
+    p.actual_shelf_date                                                     AS shelf_date,                                  -- 361取实际上架时间作为统一上架日期
+     -- 预计算：从销售明细表取最早有销量的日期
+    COALESCE(fs.first_sales_date, CAST(NULL AS DATE))                       AS first_sales_date,
+    first_order_quarter                                                     AS first_order_quarter,
+    NULL                                                                    AS year,                                        -- 361商品库无年份字段
+    NULL                                                                    AS inventory_sku,                               -- 361商品库无SKU维度库存
+    -- 361 无补货概念
+    CAST(NULL AS BIGINT) AS order_qty_skc,
+    CAST(NULL AS BIGINT) AS inventory_skc,
+    CAST(NULL AS VARCHAR) AS sales_cycle_label,
+    '否' AS is_replenish,
+    0 AS replenish_qty,
+    p.sync_time                                                             AS sync_time,
+    NOW()                                                                   AS insert_date,
+    NOW()                                                                   AS update_date
+FROM feishu_dwd.dwd_feishu_product_361_d p
+LEFT JOIN (
+    SELECT sku, MIN(sales_date) AS first_sales_date
+    FROM feishu_dwd.dwd_feishu_sales_all_d
+    WHERE brand = '361' AND qty > 0
+    GROUP BY sku
+) fs ON p.sku = fs.sku
+WHERE p.sku IS NOT NULL;
 
 -- 验证：
 -- SELECT brand, COUNT(*) FROM feishu_dwd.dwd_feishu_product_all_d GROUP BY brand;  -- 各品牌SKU数
