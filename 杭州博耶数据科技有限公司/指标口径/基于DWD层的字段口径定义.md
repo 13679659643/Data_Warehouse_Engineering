@@ -1,31 +1,25 @@
-# 基于DWD层的字段口径定义
+# 基于DWD层韦德四个渠道的字段口径定义
 
 > 编写日期：2026-07-03
-> 最近修订：2026-07-05
-> 适用范围：361品牌 + 韦德品牌
-> 维度划分：SKU维度（款号+颜色+尺码）与 SKC维度（款号+颜色）
-> 数据基座：DWD层三张核心表
+> 最近修订：2026-07-09
+> 适用范围：只考虑韦德品牌的四个渠道：channel_code IN ('wd', 'japan', 'spanish', 'germany')
+> 维度划分：SKU维度（style_no+size）与 SKC维度（style_no、款号/商品货号字段）
+> 数据基座：DWD层四张核心表：feishu_dwd.dwd_feishu_sales_all_d、feishu_dwd.dwd_feishu_product_all_d、feishu_dwd.dwd_feishu_inventory_wdpinpai_d、feishu_dwd.dwd_feishu_brand_order_arrival_d
 > 目的：明确每个业务字段的取值来源、计算逻辑、边界条件，为后续DWS/ADS层设计提供口径依据
+> **全局范围**：韦德品牌的四个渠道：channel_code IN ('wd', 'japan', 'spanish', 'germany')
+> **全局规则**：上架日期当天为销售第一天。
 
 ---
 
-## 【2026-07-05 优化说明汇总】
+## 【说明汇总】
 
 > 本次依据 `新品-热销-清货期销售分析-最终效果页.md`（Excel原文件业务口径）及 `DWD.md`（DWD层实际表结构）对本口径定义进行优化，主要变更如下：
-
-1. **【已上架天数/累计销量/1~180天基准字段明确为 `first_sales_date`】**：所有销售逻辑（已上架天数、累计销量、1~180天逐日分析、销售周期标签等）统一以 `first_sales_date`（首次销售日期）作为"第一天"来计算。`first_sales_date` = 第一次产生销量的日期，韦德和361有值就直接使用，没值（如361品牌）需从销售明细表 `MIN(sales_date)` 自行计算补充。`shelf_date`（上架日期）仅作为商品上架时间展示字段，不参与销售逻辑计算。
-2. **【渠道范围口径统一】**：原文件3.13累计销量、3.14金额、4.5实际销售(1~180天)及第六/七章汇总表中标注"全部18个渠道"，与8.2节"已确定采用口径A：所有销量、金额只采用4个核心渠道"自相矛盾。修正为：**所有销量、金额指标统一只采用4个核心渠道**（韦德：wd+japan+spanish+germany；361：361sport+china_company+361_sample+staff_hk）。
-3. **【系列日销口径补充】**：业务文档强调"用SKC匹配对应系列"，补充说明SKC维度系列日销 = 同系列所有SKC的日销量之和（与SKU维度系列日销在数值上相等）。
-4. **【二级市场补货字段处理建议优化】**：明确 DWD-4 韦德商品库已含 `is_replenish` 和 `replenish_qty`，但 DWD-6 统一商品库未保留，需在 DWS 层关联 DWD-4 单独获取。
-5. **【新增 DWD-4 韦德商品库表】**：新增 1.4 节，列明 DWD-4 含 `is_replenish`、`replenish_qty`、`order_qty_skc`、`inventory_skc`、`sales_cycle_label` 等韦德特有字段。
-6. **【`first_sales_date` 与 `shelf_date` 字段语义区分】**：明确两字段不同语义——`first_sales_date` = 第一次产生销量的日期（销售逻辑计算基准）；`shelf_date` = 商品上架日期（仅展示用）。原文件中"已上架天数基于 `shelf_date` 计算"的口径在本修订中被**回退**，恢复为基于 `first_sales_date` 计算。
 
 ---
 
 ## 一、DWD层核心表结构概览
 
 > 以下为口径定义涉及的DWD表及其关键字段，便于后续引用时快速定位。
-> **【2026-07-05 优化】**：新增 DWD-4 韦德商品库表，因统一商品库（DWD-6）未保留 `is_replenish`、`replenish_qty` 字段，需通过 DWD-4 获取以支持"达成比例"补货判断。
 
 ### 1.1 统一销售日明细表 `feishu_dwd.dwd_feishu_sales_all_d`
 
@@ -47,7 +41,6 @@
 > 粒度：品牌 + SKU + 销售日期 + 渠道（每条记录=一个渠道的一笔销售）
 > 361渠道4个：361sport / china_company / 361_sample / staff_hk
 > 韦德渠道18个：wd / wd_sample / dewu / dewu_consign / 95fen / guangdong / quanyong / yingkedi / offline / japan / spanish / weihong / 95fen_shop / pdd / ebay / entertainment / germany / b2b
-> **【2026-07-05 优化】重要提示**：本表**不含 `shelf_date`**（上架日期）。计算"已上架天数"、"累计销量"、"1~180天实际销售"等销售逻辑指标时，**以 `first_sales_date`（首次销售日期）作为第一天**进行计算（详见 3.6/3.11/4.1/4.5 节）。若需展示上架时间，需通过 `sku + brand` 关联 `dwd_feishu_product_all_d` 表获取 `shelf_date`。
 
 ### 1.2 统一商品库表 `feishu_dwd.dwd_feishu_product_all_d`
 
@@ -65,11 +58,16 @@
 | `tag_price`           | DECIMAL(18,6) | 吊牌价                             |
 | `order_qty`           | BIGINT        | 订货数量（SKU维度）                |
 | `order_date`          | DATE          | 订货日期                           |
-| `shelf_date`          | DATE          | 上架日期                           |
-| `first_sales_date`    | DATE          | 首次销售日期（韦德有，361为NULL）  |
+| `shelf_date`          | DATE          | 上架日期（统一口径：韦德取shelf_date，361取actual_shelf_date） |
+| `first_sales_date`    | DATE          | 首次销售日期（韦德有，361预计算：从销售明细表取最早有销量的日期，空值为null）  |
 | `first_order_quarter` | VARCHAR(50)   | 首次订货季度                       |
 | `year`                | VARCHAR(50)   | 年份（韦德有，361为空）            |
-| `inventory_sku`       | BIGINT        | 库存数量SKU维度（韦德有，361为空） |
+| `inventory_sku`       | BIGINT        | 库存数量SKU维度（韦德有，361为空，空值为null） |
+| `order_qty_skc`       | BIGINT        | 订货数量SKC维度（韦德有，361为空，空值为null） |
+| `inventory_skc`       | BIGINT        | 库存数量SKC维度（韦德有，361为空，空值为null） |
+| `sales_cycle_label`   | VARCHAR(100)  | 销售周期标签（韦德有，361为空，空值为null）   |
+| `is_replenish`        | VARCHAR(50)   | 是否补货（韦德特有:是/否,361固定为'否'） |
+| `replenish_qty`       | BIGINT        | 补货量（韦德特有,361为0）                |
 
 > 粒度：SKU + 品牌
 
@@ -98,40 +96,49 @@
 > 粒度：SKU + 库存更新日期
 > 注意：该表仅包含韦德品牌数据（来源wd_pinpaikucun），361品牌无品牌方库存数据
 
-### 1.4 韦德商品库清洗表 `feishu_dwd.dwd_feishu_product_wd_d` 【2026-07-05 新增】
+### 1.4 品牌订货到货情况清洗表 `feishu_dwd.dwd_feishu_brand_order_arrival_d`
 
-> **新增原因**：DWD-6 统一商品库未保留 `is_replenish`、`replenish_qty`、`order_qty_skc`、`inventory_skc`、`sales_cycle_label` 等韦德特有字段，"达成比例"等口径需补货判断，需通过本表获取。
+| 字段                    | 类型          | 说明                                      |
+| ----------------------- | ------------- | ----------------------------------------- |
+| `style_no_size`       | VARCHAR(255)  | 款号与尺码拼接（主键，形如:ABAV015-7-11.5）|
+| `sku`                 | VARCHAR(128)  | 商品SKU（按主键聚合取MAX值）              |
+| `style_no`            | VARCHAR(255)  | 款号                                      |
+| `size_code`           | VARCHAR(50)   | 尺码                                      |
+| `ip`                  | VARCHAR(100)  | IP                                        |
+| `series`              | VARCHAR(100)  | 系列                                      |
+| `color_name`          | VARCHAR(255)  | 配色名                                    |
+| `product_name`        | VARCHAR(500)  | 品名                                      |
+| `category`            | VARCHAR(100)  | 商品分类                                  |
+| `pickup_status`       | VARCHAR(50)   | 提货状态                                  |
+| `est_arrival_month`   | VARCHAR(50)   | 预计到货年月（取最早到货时间对应记录）    |
+| `order_qty`           | BIGINT        | 订货数量（叠加）                          |
+| `picked_qty`          | BIGINT        | 已提货数量（叠加）                        |
+| `unpicked_qty`        | BIGINT        | 未提货数量（叠加）                        |
+| `brand_stock_qty`     | BIGINT        | 品牌库存数量（叠加）                      |
+| `unpicked_avail_qty`  | BIGINT        | 未提可提数量（叠加）                      |
+| `unpicked_unavail_qty`| BIGINT        | 未提不可提数量（叠加）                    |
+| `cumulative_order_qty`| BIGINT        | 累计订货（叠加）                          |
+| `est_arrival_date`    | DATE          | 预计到货时间（取最早的，空值默认NULL）    |
+| `30_est_arrival_date` | DATE          | 预计到货时间+30天                         |
+| `sync_time`           | DATETIME      | ODS同步时间（取最新时间）                |
+| `insert_date`         | DATETIME      | DWD记录插入时间（ETL写入，增量更新用）   |
+| `update_date`         | DATETIME      | DWD记录更新时间（ETL写入，增量更新用）   |
 
-| 字段                 | 类型          | 说明                                          |
-| -------------------- | ------------- | --------------------------------------------- |
-| `sku`              | VARCHAR(128)  | SKU编码（主键）                              |
-| `style_no`         | VARCHAR(128)  | 款号                                          |
-| `series`           | VARCHAR(100)  | 系列                                          |
-| `color_name`       | VARCHAR(100)  | 配色名                                        |
-| `order_qty_sku`    | BIGINT        | 订货数量(SKU维度)                            |
-| `order_qty_skc`    | BIGINT        | 订货数量(SKC维度)                            |
-| `inventory_sku`    | BIGINT        | 库存数量(SKU)                                |
-| `inventory_skc`    | BIGINT        | 库存数量(SKC)                                |
-| `sales_cycle_label` | VARCHAR(100)  | 销售周期标签（业务原始口径）                |
-| `is_replenish`     | VARCHAR(50)   | 是否补货（是/否），用于达成比例分母调整      |
-| `replenish_qty`     | BIGINT        | 补货量，用于达成比例分母调整                 |
-| `rating`           | VARCHAR(50)   | 评级（S/A/B/C）                              |
-| `actual_daily_avg` | DECIMAL(18,6) | 实际日均销量                                  |
+> 粒度：款号+尺码（style_no_size）
+> 注意：该表以 `style_no_size` 为主键，源数据需按此主键聚合后写入；预计到货时间取最早值，ODS同步时间取最新值
 
-> 粒度：SKU
-> 注意：仅包含韦德品牌数据，361品牌无对应数据。
 
 ---
 
-## 二、SKC与SKU的维度说明
+## 二、SKC与SKU的维度说明(遵守全局范围韦德四个渠道)
 
 | 维度          | 定义         | 构成               | 示例           |
 | ------------- | ------------ | ------------------ | -------------- |
-| **SKU** | 最小可售单元 | 款号 + 颜色 + 尺码 | AB123456-黑-42 |
-| **SKC** | 款号+颜色级  | 款号 + 颜色        | AB123456-黑    |
+| **SKU** | 最小可售单元，表中为`dwd_feishu_product_all_d.style_no-dwd_feishu_product_all_d.size` | CONCAT_WS ('-',style_no,size) | ABAS083-11-12.5 |
+| **SKC** | 款号+颜色级，表中为`dwd_feishu_product_all_d.style_no` | style_no        | ABAS083-11    |
 
-> 在DWD层中，SKU由 `sku` 字段唯一标识；SKC需通过 `style_no` + `color_name` 组合推导。
-> **注意**：`dwd_feishu_product_all_d` 表中361品牌的 `color_name` 为NULL，361品牌的SKC需通过 `style_no` + 截取SKU中的颜色部分来推导，或直接用 `style_no` 近似（361业务上款号即近似SKC）。
+> 在DWD层中，SKU由 style_no,size 拼接而成为新的字段style_no_size，所有业务都用这个字段来表示SKU；SKC即 `style_no` 字段值。
+> **注意**：style_no_size就是我们之后DWS/ADS/QUICKBI中展示的维度展示字段，等于SKU维度，后续所有业务都用style_no_size来表示SKU。
 
 ---
 
@@ -141,10 +148,10 @@
 
 | 项       | 说明                                       |
 | -------- | ------------------------------------------ |
-| 数据来源 | `dwd_feishu_product_all_d.sku`           |
+| 数据来源 | `dwd_feishu_product_all_d.style_no`           |
 | 口径     | 直接取值                                   |
 | 粒度     | 一条SKU一条记录                            |
-| 边界     | 过滤 `sku IS NOT NULL AND sku <> 'None'` |
+| 边界     | 过滤 `style_no_size IS NOT NULL AND style_no_size <> 'None'` |
 
 ---
 
@@ -175,9 +182,10 @@
 | 数据来源 | `dwd_feishu_product_all_d.shelf_date`                                                       |
 | 口径     | 直接取值。该SKU的实际上架日期（DATE类型）                                                     |
 | 说明     | 韦德取 `shelf_date`，361取 `actual_shelf_date`（已在DWD层ETL中统一映射为 `shelf_date`） |
-| 边界     | 空值或'1970-01-01'表示无上架日期                                                              |
+| 边界     | '1970-01-01'表示无上架日期                                                              |
 
-> **【2026-07-05 优化】字段语义明确**：`shelf_date`（上架日期）**仅作为商品上架时间展示字段**，不参与销售逻辑计算。销售相关指标（已上架天数、累计销量、1~180天逐日分析、销售周期标签等）的计算基准字段为 `first_sales_date`（首次销售日期，详见 3.5 节）。
+> **【2026-07-05】字段语义明确**：`shelf_date`（上架日期）**仅作为商品上架时间展示字段**，参与已上架天数计算，公式：today（）-上架日期+1，以上架日期当天为销售第一天。
+> 销售相关指标（累计销量、1~180天逐日分析、销售周期标签等）的计算基准字段为 `first_sales_date`（首次销售日期，详见 3.5 节）。
 
 ---
 
@@ -185,26 +193,13 @@
 
 | 项                 | 说明                                                                        |
 | ------------------ | --------------------------------------------------------------------------- |
-| **业务定义** | **第一次产生销量的日期**。后续所有销售逻辑（已上架天数、累计销量、1~180天逐日分析、销售周期标签等）都以该日期作为"第一天"来计算。 |
+| **业务定义** | **第一次产生销量的日期**。后续所有销售逻辑（累计销量、1~180天逐日分析、销售周期标签等）都以该日期作为"第一天"来计算。 |
 | **韦德品牌** | `dwd_feishu_product_all_d.first_sales_date`，直接取值                     |
-| **361品牌**  | DWD层商品库中 `first_sales_date` 为NULL，**需从销售明细表自行计算**        |
+| **361品牌**  | DWD层商品库中 `first_sales_date` 为NULL，**已经预计算：从销售明细表取最早有销量的日期，空值为null**        |
 | 361计算逻辑        | 对每个SKU，取 `dwd_feishu_sales_all_d` 中该SKU最早有销量的 `sales_date` |
-
-```sql
--- 361品牌：计算首次销售日期
-SELECT
-    s.sku,
-    MIN(s.sales_date) AS first_sales_date
-FROM feishu_dwd.dwd_feishu_sales_all_d s
-WHERE s.brand = '361'
-  AND s.qty > 0
-GROUP BY s.sku
-```
 
 | 边界 | 若SKU从未产生销售，则 `first_sales_date` 为空。该SKU不参与1~180天逐日分析。 |
 
-> **【2026-07-05 优化】口径明确**：`first_sales_date` = 第一次产生销量的日期。**韦德和361有值就直接使用，没值（如361品牌）需要自己计算**。该字段是所有销售逻辑（已上架天数、累计销量、日销量、1~180天逐日分析、销售周期标签）的"第一天"基准字段，**不可缺失**。
-> **影响**：361品牌必须在 DWS 层（或建议在 DWD 层 ETL 阶段预计算）从销售明细表 `MIN(sales_date)` 补充 `first_sales_date`，否则所有销售逻辑指标无法计算。
 
 ---
 
@@ -213,13 +208,13 @@ GROUP BY s.sku
 | 项       | 说明                                                            |
 | -------- | --------------------------------------------------------------- |
 | 数据来源 | 计算字段                                                        |
-| 口径     | `DATEDIFF(CURRENT_DATE(), first_sales_date) + 1`              |
-| 说明     | **首次销售当天计为第1天**（即销售逻辑的"第一天"）。`CURRENT_DATE()` 为当前日期 |
-| 示例     | first_sales_date='2026-06-01'，今天='2026-06-30'，已上架天数=30 |
-| 边界     | 若 `first_sales_date` 为NULL或'1970-01-01'，该字段为空         |
+| 口径     | `DATEDIFF(CURRENT_DATE(), shelf_date) + 1`              |
+| 说明     | **上架日期当天为销售第一天**（即上架时间，上架时间dwd_feishu_product_all_d.shelf_date，如果上架时间没填则该字段为空）。`CURRENT_DATE()` 为当前日期 |
+| 示例     | shelf_date='2026-06-01'，今天='2026-06-30'，已上架天数=29+1=30 |
+| 边界     | 若 `shelf_date` 为NULL，该字段为空，（即上架时间，插入dwd_feishu_product_all_d表时，已实现使用 NULLIF 将默认的 '1970-01-01' 转为 NULL，避免影响上架天数计算|
 
-> **【2026-07-05 优化】口径明确**：已上架天数 = `DATEDIFF(CURRENT_DATE(), first_sales_date) + 1`，以 `first_sales_date`（首次销售日期）作为"第一天"。
-> **注意**：本口径与业务文档"已上架天数 = today()-上架日期+1"的描述存在差异——业务文档中"上架日期"实际指代"首次销售日期"（即第一次产生销量的日期），而非商品物理上架日期 `shelf_date`。本口径明确基准字段为 `first_sales_date`。
+> **【2026-07-05】口径明确**：已上架天数 = `DATEDIFF(CURRENT_DATE(), shelf_date) + 1`，以 `shelf_date`（上架日期）作为"第一天"。
+> **注意**：本口径与业务文档"已上架天数 = today()-上架日期+1"的描述一致。
 
 ---
 
@@ -238,7 +233,7 @@ GROUP BY s.sku
 
 | 边界 | 已上架天数 > 180 时，标记为"超周期"；已上架天数为空时，标签为空 |
 
-> **【2026-07-05 优化】361品牌说明**：361品牌无 `first_sales_date` 字段值，**需从销售明细表 `MIN(sales_date)` 自行计算补充**后，再计算已上架天数与销售周期标签。建议在 DWD 层 ETL 阶段预计算补充，避免 DWS 层重复计算。
+> **【2026-07-05】361品牌说明**：361品牌 `first_sales_date` 字段值逻辑已实现：从销售明细表取最早有销量的日期，空值为null
 
 ---
 
@@ -252,7 +247,7 @@ GROUP BY s.sku
 | 边界     | 空值兜底为0                                |
 
 > **361品牌缺失说明**：`dwd_feishu_product_all_d` 中361品牌的 `inventory_sku` 为NULL（361商品库无SKU维度库存字段）。若361需要SKU维度在仓库存，需从其他来源补充或确认361是否使用品牌方库存表。
-
+> **DWD层361品牌库存逻辑待补充**：等待补充，暂时不参与在仓库存计算。
 ---
 
 ### 3.9 可提库存
@@ -266,16 +261,18 @@ GROUP BY s.sku
 | 边界     | 空值兜底为0；361品牌无品牌方库存数据，该字段为0                                       |
 
 ```sql
--- 取最新日期的品牌方库存
+-- 取最新日期的品牌方库存,对同一sku的MAX(inventory_date)存在多条记录,需要聚合
 SELECT
     inv.sku,
-    inv.inventory_qty AS available_inventory
+    SUM(inv.inventory_qty) AS available_inventory
 FROM feishu_dwd.dwd_feishu_inventory_wdpinpai_d inv
 INNER JOIN (
     SELECT sku, MAX(inventory_date) AS max_date
     FROM feishu_dwd.dwd_feishu_inventory_wdpinpai_d
+    WHERE sku = 'BYSku1000000614300829'
     GROUP BY sku
-) latest ON inv.sku = latest.sku AND inv.inventory_date = latest.max_date
+) latest ON inv.sku = latest.sku AND inv.inventory_date = latest.max_date AND inv.sku = 'BYSku1000000614300829'
+GROUP BY inv.sku
 ```
 
 ---
@@ -300,7 +297,7 @@ INNER JOIN (
 | 口径     | **30天平均日销**。已售天数不足30天时按实际已售天数计算 |
 
 ```
-已上架天数 = N（基于 first_sales_date 计算：DATEDIFF(CURRENT_DATE(), first_sales_date) + 1）
+已上架天数 = N（基于 shelf_date 计算：DATEDIFF(CURRENT_DATE(), shelf_date) + 1）
 已售天数 = N - 1（今日销量次日才更新，故排除今天）
 
 如果已售天数 = 0:  日销量 = 空（无销售历史）
@@ -315,23 +312,68 @@ INNER JOIN (
 | 边界     | 已售天数=0时为空                                                                                                                            |
 
 ```sql
--- 韦德品牌：日销量计算示例（假设当前日期为2026-07-03）
-SELECT
-    s.sku,
-    CASE
-        WHEN sold_days = 0 THEN NULL
-        WHEN sold_days < 30 THEN SUM(s.qty) / sold_days
-        ELSE SUM(CASE WHEN s.sales_date >= DATE_SUB(CURRENT_DATE(), 30) THEN s.qty ELSE 0 END) / 30
-    END AS daily_sales
-FROM feishu_dwd.dwd_feishu_sales_all_d s
-INNER JOIN feishu_dwd.dwd_feishu_product_all_d p ON s.sku = p.sku AND s.brand = p.brand
-WHERE s.brand = '韦德'
-  AND s.channel_code IN ('wd', 'japan', 'spanish', 'germany')
-  AND s.sales_date BETWEEN p.first_sales_date AND DATE_SUB(CURRENT_DATE(), 1)
-GROUP BY s.sku
+-- 参考SQL,韦德品牌：日销量计算示例（假设当前日期为CURRENT_DATE()）
+	WITH sales_agg AS (
+	    -- 1. 先将销售明细表按 sku+brand 聚合，避免 JOIN 时的一对多数据膨胀
+	    SELECT 
+	        sku,
+	        brand,
+	        -- 截至昨日累计销量
+	        SUM(CASE WHEN sales_date < CURRENT_DATE() THEN qty ELSE 0 END) AS total_qty_to_date,
+	        -- 最近30天销量 (昨日往前推30天)
+	        SUM(CASE WHEN sales_date >= DATE_SUB(CURRENT_DATE(), 30) AND sales_date < CURRENT_DATE() THEN qty ELSE 0 END) AS last_30d_qty
+	    FROM feishu_dwd.dwd_feishu_sales_all_d
+	    WHERE brand = '韦德' 
+	      -- 限定韦德品牌及4个核心渠道
+	      AND channel_code IN ('wd', 'japan', 'spanish', 'germany')
+	    GROUP BY 
+	        sku, 
+	        brand
+	),
+	base_data AS (
+	    -- 2. 商品表 LEFT JOIN 聚合后的销售数据（此时已是1对1关系，无膨胀风险）
+	    SELECT 
+	        p.sku,
+	        p.brand,
+	        p.inventory_sku,
+	        -- 已售天数 = DATEDIFF(CURRENT_DATE(), shelf_date) + 1 - 1
+	        DATEDIFF(CURRENT_DATE(), p.shelf_date) AS sold_days,
+	        COALESCE(s.total_qty_to_date, 0) AS total_qty_to_date,
+	        COALESCE(s.last_30d_qty, 0) AS last_30d_qty
+	    FROM feishu_dwd.dwd_feishu_product_all_d p
+	    LEFT JOIN sales_agg s 
+	        ON p.sku = s.sku 
+	        AND p.brand = s.brand
+	    WHERE p.brand = '韦德' 
+	      AND p.shelf_date IS NOT NULL
+	),
+	daily_sales_calc AS (
+	    -- 3. 根据已售天数计算日销量
+	    SELECT 
+	        sku,
+	        brand,
+	        inventory_sku,
+	        CASE
+	            WHEN sold_days <= 0 THEN NULL -- 已售天数=0或上架当天，日销量为空
+	            WHEN sold_days < 30 THEN total_qty_to_date * 1.0 / sold_days -- 不足30天按实际已售天数计算
+	            ELSE last_30d_qty * 1.0 / 30 -- 满30天按30天平均计算
+	        END AS daily_sales
+	    FROM base_data
+	)
+	-- 4. 计算最终可售周期
+	SELECT 
+	    sku,
+	    brand,
+	    inventory_sku,
+	    daily_sales,
+	    CASE 
+	        WHEN daily_sales IS NULL OR daily_sales = 0 THEN NULL -- 防止除零，日销量为0或空时返回NULL
+	        ELSE inventory_sku / daily_sales 
+	    END AS sellable_days -- 可售周期(天)
+	FROM daily_sales_calc;
 ```
 
-> **【2026-07-05 优化】基准字段明确**：已上架天数 N 基于 `first_sales_date`（首次销售日期）计算，与 3.6 节保持一致。SQL 示例中 `BETWEEN p.first_sales_date` 替代原 `BETWEEN p.shelf_date`。
+> **【2026-07-05】基准字段明确**：已上架天数 N 基于 `shelf_date`（上架日期）计算，与 3.6 节保持一致。
 
 ---
 
@@ -353,7 +395,7 @@ GROUP BY s.sku
 | 说明     | 用于评估整个系列的销售热度，而非单SKU            |
 | 边界     | 系列内某些SKU无销售数据时，其日销量视为0参与汇总 |
 
-> **【2026-07-05 优化】SKC维度系列日销口径补充**：业务文档（最终效果页.xlsx 说明文档sheet）明确写"用SKC匹配对应系列，再使用系列单条件求和日销量"。在 SKC 维度下，系列日销 = 同系列所有 SKC 的日销量之和 = 同系列所有 SKU 的日销量之和（因为 SKC 是 SKU 的上一级聚合，聚合到系列级别时数值相等）。详见 5.11 节。
+> **【2026-07-05】SKC维度系列日销口径补充**：待补充。
 
 ---
 
@@ -368,7 +410,7 @@ GROUP BY s.sku
 累计销量 = SUM(qty)
 数据源: dwd_feishu_sales_all_d
 条件: sku匹配 AND sales_date BETWEEN first_sales_date AND DATE_SUB(CURRENT_DATE(), 1)
-渠道范围: 核心渠道（韦德4个/361四个）
+渠道范围: 暂时只关注韦德四个核心渠道。
 ```
 
 | 项       | 说明                                |
@@ -377,9 +419,9 @@ GROUP BY s.sku
 | 渠道范围 | **核心4个渠道**（与日销量、金额保持一致） |
 | 边界     | 首次销售当天（已售天数=0），累计销量=0  |
 
-> **【2026-07-05 优化】口径修正说明**：
-> 1. **时间范围**：基于 `first_sales_date`（首次销售日期）计算，与已上架天数（3.6节）保持一致。业务文档"累计销量"对应"销售计划（销售后）"工作表的累计，即从首次销售开始累计。
-> 2. **渠道范围**：原文件写"全部渠道（不限定channel_code）"，但8.2节已确定"所有销量、金额只采用4个核心渠道"。修正为与日销量、金额保持一致，仅取核心渠道。
+> **【2026-07-05】口径修正说明**：
+> 1. **时间范围**：基于 `first_sales_date`（首次销售日期）计算，即从首次销售开始累计。
+> 2. **渠道范围**：仅取核心渠道，后续调整时再考虑361品牌和韦德其他渠道。
 
 ---
 
@@ -394,7 +436,7 @@ GROUP BY s.sku
 金额 = SUM(amt)
 数据源: dwd_feishu_sales_all_d
 条件: sku匹配 AND sales_date BETWEEN first_sales_date AND DATE_SUB(CURRENT_DATE(), 1)
-渠道范围: 核心渠道（韦德4个/361四个）
+渠道范围: 暂时只关注韦德四个核心渠道。
 ```
 
 | 项       | 说明                |
@@ -403,7 +445,8 @@ GROUP BY s.sku
 | 渠道范围 | **核心4个渠道**（与累计销量保持一致） |
 | 单位     | 元（DECIMAL(18,6)） |
 
-> **【2026-07-05 优化】口径修正说明**：与3.13节累计销量同步修正：时间范围基于 `first_sales_date`（首次销售日期），渠道范围仅取核心4个渠道。
+> 1. **时间范围**：基于 `first_sales_date`（首次销售日期）计算，即从首次销售开始累计。
+> 2. **渠道范围**：仅取核心渠道，后续调整时再考虑361品牌和韦德其他渠道。
 
 ---
 
@@ -416,7 +459,7 @@ GROUP BY s.sku
 | 说明     | DWD层已将韦德的 `order_qty_sku` 和361的 `order_qty` 统一映射为 `order_qty` |
 | 边界     | 空值兜底为0                                                                      |
 
-> **SKC维度说明**：同一SKC下各尺码SKU的 `order_qty` 之和 = SKC维度订货数量。若DWD层 `order_qty` 本身已是SKC维度（韦德原始字段 `order_qty_skc`），则同一SKC下各SKU的 `order_qty` 值相同，SKC维度直接取值即可。
+> **SKC维度说明**：即style_no维度，聚合各尺码SKU的 `order_qty` 之和 = SKC维度订货数量。
 
 ---
 
@@ -437,9 +480,9 @@ GROUP BY s.sku
 | 边界     | 订货数量=0时为空（防止除零）                                                                                     |
 | 补充判断 | 业务文档提到需判断SKC是否存在二级市场补货：①二级市场是否补货（是/否）②补货数量。若存在补货，分母应加上补货数量 |
 
-> **【2026-07-05 优化】二级市场补货字段处理建议**：
+> **【2026-07-05】二级市场补货字段处理建议**：
 > - 业务文档明确"达成比例=累计销量/订货数量"，并需判断SKC是否存在二级市场补货：①二级市场是否补货（是、否）②补货数量。
-> - DWD-4 韦德商品库（`dwd_feishu_product_wd_d`）已包含 `is_replenish`（是否补货）和 `replenish_qty`（补货量）字段，但 DWD-6 统一商品库未保留这两个字段。
+> - DWD-4 韦德商品库（`dwd_feishu_product_wd_d`）已包含 `is_replenish`（是否补货）和 `replenish_qty`（补货量）字段，但 DWD-6 统一商品库已保留这两个字段。
 > - **建议处理方式**：在 DWS 层计算"达成比例"时，单独 LEFT JOIN `dwd_feishu_product_wd_d` 获取这两个字段。判断逻辑：当 `is_replenish = '是'` 时，分母 = 订货数量 + `replenish_qty`；否则分母 = 订货数量。
 > - 361品牌无补货概念，分母直接取订货数量。
 
@@ -461,7 +504,7 @@ GROUP BY s.sku
 
 | 项           | 说明                                                        |
 | ------------ | ----------------------------------------------------------- |
-| 韦德渠道范围 | wd + japan + spanish + germany（4个核心渠道）               |
+| 韦德渠道范围 | wd + japan + spanish + germany（4个核心渠道），韦德渠道18目前仅关注这4个核心渠道。 |
 | 361渠道范围  | 361sport + china_company + 361_sample + staff_hk（4个渠道） |
 | 时间         | 仅昨天一天                                                  |
 | 边界         | 昨日无销售记录时为0                                         |
@@ -560,7 +603,7 @@ GROUP BY s.sku
 | phase(N)      | 第N天所在阶段                                             | 见下方阶段表                                     |
 | ratio(N)      | 第N天所在阶段的比例                                       | 见下方阶段表                                     |
 
-> **【2026-07-05 优化】基准日期明确**：N（上市第N天）基于 `first_sales_date`（首次销售日期）计算：`DATEDIFF(sales_date, first_sales_date) + 1`，与3.6节已上架天数保持一致。`first_sales_date` 当天计为第1天。
+> **【2026-07-05】基准日期明确**：N（上市第N天）基于 `first_sales_date`（首次销售日期）计算：`DATEDIFF(sales_date, first_sales_date) + 1`，与3.6节已上架天数保持一致。`first_sales_date` 当天计为第1天。
 
 ### 4.2 阶段与比例
 
@@ -606,7 +649,7 @@ GROUP BY s.sku
 | 数据来源 | Q来自 `dwd_feishu_product_all_d.order_qty`；cum_actual来自 `dwd_feishu_sales_all_d` 按lifecycle_day累计 |
 | 特点     | 每天更新。实际卖得越多，后续计划越低；反之亦然                                                              |
 
-> **【2026-07-05 优化】cum_actual口径说明**：cum_actual(N) = 截至第N-1天，该SKU在**核心渠道**的实际销量总和。lifecycle_day 基于首次销售日期 `first_sales_date` 计算（与4.1节保持一致）。
+> **【2026-07-05】cum_actual口径说明**：cum_actual(N) = 截至第N-1天，该SKU在**核心渠道**的实际销量总和。lifecycle_day 基于首次销售日期 `first_sales_date` 计算（与4.1节保持一致）。
 
 **示例**（Q=1000）：
 
@@ -654,7 +697,7 @@ GROUP BY s.sku
 | 边界     | 该天无销售记录时为0                                         |
 | 说明     | 匹配方式：`SUM(qty) WHERE sku匹配 AND lifecycle_day = N`    |
 
-> **【2026-07-05 优化】口径修正说明**：
+> **【2026-07-05】口径修正说明**：
 > 1. **基准日期**：`lifecycle_day` 基于首次销售日期 `first_sales_date` 计算：`DATEDIFF(sales_date, first_sales_date) + 1 = N`，与3.6节已上架天数保持一致。
 > 2. **渠道范围**：原文件写"全部渠道（与日销量仅取核心渠道不同）"，但8.2节已确定"所有销量、金额只采用4个核心渠道"。修正为与日销量、累计销量、金额保持一致，仅取核心渠道。
 
@@ -739,7 +782,7 @@ WHERE s.brand = '361' AND s.qty > 0
 GROUP BY p.style_no
 ```
 
-> **【2026-07-05 优化】口径明确**：与 3.5 节同步，SKC 维度的首次销售日期是 SKC 销售逻辑（5.5 已上架天数、5.6 销售周期标签、5.12 累计销量、5.19 1~180天逐日分析等）的"第一天"基准字段。**韦德和361有值就直接使用，没值（如361品牌）需要自己计算**。
+> **【2026-07-05】口径明确**：与 3.5 节同步，SKC 维度的首次销售日期是 SKC 销售逻辑（5.5 已上架天数、5.6 销售周期标签、5.12 累计销量、5.19 1~180天逐日分析等）的"第一天"基准字段。**韦德和361有值就直接使用，没值（如361品牌）需要自己计算**。
 
 ---
 
@@ -750,7 +793,7 @@ GROUP BY p.style_no
 | 口径 | `DATEDIFF(CURRENT_DATE(), SKC首次销售日期) + 1`                    |
 | 说明 | 基于SKC维度的首次销售日期 `MIN(first_sales_date)` 计算，而非SKU维度 |
 
-> **【2026-07-05 优化】口径明确**：SKC 已上架天数基于 SKC 维度的首次销售日期 `MIN(first_sales_date)` 计算，与 3.6 节 SKU 维度口径保持一致（首次销售当天计为第1天）。
+> **【2026-07-05】口径明确**：SKC 已上架天数基于 SKC 维度的首次销售日期 `MIN(first_sales_date)` 计算，与 3.6 节 SKU 维度口径保持一致（首次销售当天计为第1天）。
 
 ---
 
@@ -839,7 +882,7 @@ SKC累计销量 = SUM(同SKC所有SKU的累计销量)
 | 渠道范围 | **核心4个渠道**（与3.13节保持一致） |
 | 时间范围 | SKC首次销售日期 `MIN(first_sales_date)` ~ 昨天 |
 
-> **【2026-07-05 优化】口径修正**：与 3.13 节同步修正。渠道范围取核心4个渠道（原文件写"全部渠道"，与8.2节矛盾）；时间范围基于 `MIN(first_sales_date)`（首次销售日期），与 5.5 节 SKC 已上架天数口径保持一致。
+> **【2026-07-05】口径修正**：与 3.13 节同步修正。渠道范围取核心4个渠道（原文件写"全部渠道"，与8.2节矛盾）；时间范围基于 `MIN(first_sales_date)`（首次销售日期），与 5.5 节 SKC 已上架天数口径保持一致。
 
 ---
 
@@ -857,7 +900,7 @@ SKC金额 = SUM(同SKC所有SKU的金额)
 | 渠道范围 | **核心4个渠道**（与3.14节保持一致） |
 | 时间范围 | SKC首次销售日期 `MIN(first_sales_date)` ~ 昨天 |
 
-> **【2026-07-05 优化】口径修正**：与 3.14 节同步修正。补充渠道范围（核心4个渠道）和时间范围（基于 `MIN(first_sales_date)`）说明。
+> **【2026-07-05】口径修正**：与 3.14 节同步修正。补充渠道范围（核心4个渠道）和时间范围（基于 `MIN(first_sales_date)`）说明。
 
 ---
 
@@ -917,14 +960,14 @@ SKC金额 = SUM(同SKC所有SKU的金额)
 | ratio(N)      | 同4.2节阶段定义                                      |
 | 实际销售(N)   | SKC维度第N天核心渠道销量总和                         |
 
-> **【2026-07-05 优化】渠道范围修正**：原文件写"全部渠道"，修正为"核心渠道"，与 4.5 节保持一致。
+> **【2026-07-05】渠道范围修正**：原文件写"全部渠道"，修正为"核心渠道"，与 4.5 节保持一致。
 
 ---
 
 ## 六、渠道范围汇总
 
 > 不同指标对渠道范围的要求不同，以下统一汇总。
-> **【2026-07-05 优化】渠道口径统一**：所有销量、金额指标统一只采用4个核心渠道，原文件中"全部18个渠道/全部4个渠道"的标注已修正。
+> **【2026-07-05】渠道口径统一**：所有销量、金额指标统一只采用4个核心渠道，原文件中"全部18个渠道/全部4个渠道"的标注已修正。
 
 | 指标            | 韦德品牌渠道范围                   | 361品牌渠道范围                                      | 说明                   |
 | --------------- | ---------------------------------- | ---------------------------------------------------- | ---------------------- |
@@ -942,7 +985,7 @@ SKC金额 = SUM(同SKC所有SKU的金额)
 
 ### 7.1 SKU维度
 
-> **【2026-07-05 优化】映射表修正**：累计销量、金额、1~180天实际销售的渠道范围由"全渠道"修正为"核心4个渠道"。已上架天数公式基准字段明确为 `first_sales_date`（首次销售日期）。
+> **【2026-07-05】映射表修正**：累计销量、金额、1~180天实际销售的渠道范围由"全渠道"修正为"核心4个渠道"。已上架天数公式基准字段明确为 `first_sales_date`（首次销售日期）。
 
 | 业务字段              | DWD表                              | DWD字段          | 取值方式                                     |
 | --------------------- | ---------------------------------- | ---------------- | -------------------------------------------- |
@@ -974,7 +1017,7 @@ SKC金额 = SUM(同SKC所有SKU的金额)
 
 ### 7.2 SKC维度
 
-> **【2026-07-05 优化】映射表修正**：
+> **【2026-07-05】映射表修正**：
 > 1. 已上架天数基于 SKC 首次销售日期（`MIN(first_sales_date)`）计算，作为 SKC 销售逻辑的"第一天"基准；
 > 2. 累计销量、金额、1~180天实际销售时间范围统一为 `MIN(first_sales_date) ~ 昨日`，渠道范围统一为"核心4个渠道"。
 
@@ -1012,7 +1055,7 @@ SKC金额 = SUM(同SKC所有SKU的金额)
 | 二级市场补货数量 `replenish_qty` | 达成比例分母调整                      | 韦德     | 同上                                                       |
 | 361品牌方库存数据                  | 可提库存                              | 361      | 确认361是否需要品牌方库存，若需要则需新增ODS采集           |
 
-> **【2026-07-05 优化】影响口径描述更新**：`first_sales_date`（首次销售日期）是所有销售逻辑（已上架天数、销售周期标签、累计销量、1~180天逐日分析等）的"第一天"基准字段，**不可缺失**。361 品牌必须在 DWS 层（或建议在 DWD 层 ETL 阶段预计算）从销售明细表 `MIN(sales_date)` 补充 `first_sales_date`，否则所有销售逻辑指标无法计算。
+> **【2026-07-05】影响口径描述更新**：`first_sales_date`（首次销售日期）是所有销售逻辑（已上架天数、销售周期标签、累计销量、1~180天逐日分析等）的"第一天"基准字段，**不可缺失**。361 品牌必须在 DWS 层（或建议在 DWD 层 ETL 阶段预计算）从销售明细表 `MIN(sales_date)` 补充 `first_sales_date`，否则所有销售逻辑指标无法计算。
 
 ### 8.2 待确认口径问题
 
@@ -1024,7 +1067,7 @@ SKC金额 = SUM(同SKC所有SKU的金额)
 | 累计销量        | 业务文档写"4个站销量总和" | 备选：全部渠道（更合理：累计应包含所有销售） |
 | 1~180天实际销售 | 业务文档SUMIFS未限定渠道  | 备选：全部渠道（与累计销量一致）             |
 
-> **【2026-07-05 优化】最终口径确定**：已确定采用**口径A**：所有销量、金额指标只采用4个核心渠道：韦德 wd + japan + spanish + germany；361 361sport + china_company + 361_sample + staff_hk。本口径定义全篇（3.13/3.14/3.17/4.5/5.12/5.13/5.16/5.19/第六章/第七章）均已修正为该口径。
+> **【2026-07-05】最终口径确定**：已确定采用**口径A**：所有销量、金额指标只采用4个核心渠道：韦德 wd + japan + spanish + germany；361 361sport + china_company + 361_sample + staff_hk。本口径定义全篇（3.13/3.14/3.17/4.5/5.12/5.13/5.16/5.19/第六章/第七章）均已修正为该口径。
 > 原文件中"口径B（本口径定义采用）"的描述与本口径实际采用方案相矛盾，已修正。
 
 #### 问题2：销售计划(销售后)的cum_actual口径

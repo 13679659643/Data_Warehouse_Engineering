@@ -1714,8 +1714,8 @@ CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_product_all_d (
     `order_qty`           BIGINT          COMMENT "订货数量（统一为SKU维度，整数）",
     -- 4. 维度列：订货/上架/销售时间（统一口径）
     `order_date`          DATE            COMMENT "订货日期",
-    `shelf_date`          DATE            COMMENT "上架日期（统一口径：韦德取shelf_date，361取actual_shelf_date）",
-    `first_sales_date`    DATE            COMMENT "首次销售日期（韦德有，361为空）",
+    `shelf_date`          DATE            COMMENT "上架日期（统一口径：韦德取shelf_date，361取actual_shelf_date，空值为null）",
+    `first_sales_date`    DATE            COMMENT "首次销售日期（韦德有，361预计算：从销售明细表取最早有销量的日期，空值为null）",
     `first_order_quarter` VARCHAR(50)     COMMENT "首次订货季度",
     `year`                VARCHAR(50)     COMMENT "年份（韦德有，361为空）",    
     -- 5. 度量列：库存信息（韦德有详细库存，361为空）
@@ -1763,7 +1763,8 @@ SELECT
     wd.tag_price,
     wd.order_qty_sku AS order_qty,                                   -- 统一为SKU维度订货量
     wd.order_date,
-    wd.shelf_date,                                                   -- 韦德直接取上架日期
+    -- 使用 NULLIF 将默认的 '1970-01-01' 转为 NULL，避免影响上架天数计算，韦德直接取上架日期
+    NULLIF(CAST(wd.shelf_date AS DATE), CAST('1970-01-01' AS DATE))   AS shelf_date, 
     COALESCE(fs.first_sales_date, fs.first_sales_date) AS first_sales_date,
     wd.first_order_quarter,
     wd.year,
@@ -1806,7 +1807,8 @@ SELECT
     p.tag_price                                                             AS tag_price,
     p.order_qty                                                             AS order_qty,
     p.order_date                                                            AS order_date,
-    p.actual_shelf_date                                                     AS shelf_date,                                  -- 361取实际上架时间作为统一上架日期
+    -- 使用 NULLIF 将默认的 '1970-01-01' 转为 NULL，避免影响上架天数计算，361取实际上架时间作为统一上架日期
+    NULLIF(CAST(p.actual_shelf_date AS DATE), CAST('1970-01-01' AS DATE))   AS shelf_date,  
      -- 预计算：从销售明细表取最早有销量的日期
     COALESCE(fs.first_sales_date, CAST(NULL AS DATE))                       AS first_sales_date,
     first_order_quarter                                                     AS first_order_quarter,
