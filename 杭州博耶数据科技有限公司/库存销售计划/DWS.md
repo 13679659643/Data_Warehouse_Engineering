@@ -317,7 +317,7 @@ product_base AS (
         ON CONCAT_WS('-', p.style_no, p.size) = boa.style_no_size
     WHERE p.brand = '韦德'
 ),
--- 3. 可提库存（口径3.10节）：取最新 inventory_date，按 style_no_size 聚合（一步完成）
+-- 3. 可提库存（口径3.10节）：取最新 inventory_date，按 style_no_size 聚合
 available_inv AS (
     SELECT
         CONCAT_WS('-', inv.style_no, inv.size)             AS style_no_size,
@@ -327,20 +327,41 @@ available_inv AS (
     GROUP BY CONCAT_WS('-', inv.style_no, inv.size)
 ),
 -- 4. 销售汇总（口径3.12节 / 3.16节）：核心4渠道，按 style_no_size 聚合
+--    【修改点1】：关联 product_base 获取补全后的 shelf_date，过滤上架前的异常销售记录
 --    累计销量 = shelf_date ~ 昨日 的 SUM(qty)
 --    最近30天销量 = 最近30天（含昨日）的 SUM(qty)
 sales_agg AS (
     SELECT
         CONCAT_WS('-', s.style_no, s.size)                 AS style_no_size,
-        COALESCE(SUM(CASE WHEN s.sales_date < CURRENT_DATE() THEN s.qty ELSE 0 END), 0)
-                                                          AS cum_actual,
+        COALESCE(SUM(CASE WHEN s.sales_date < CURRENT_DATE() 
+                          AND s.sales_date >= pb.shelf_date THEN s.qty ELSE 0 END), 0) AS cum_actual,
         COALESCE(SUM(CASE WHEN s.sales_date >= DATE_SUB(CURRENT_DATE(), 30)
-                          AND s.sales_date < CURRENT_DATE() THEN s.qty ELSE 0 END), 0)
-                                                          AS last_30d_qty
+                          AND s.sales_date < CURRENT_DATE()
+                          AND s.sales_date >= pb.shelf_date THEN s.qty ELSE 0 END), 0) AS last_30d_qty
     FROM feishu_dwd.dwd_feishu_sales_all_d s
+    -- 【修改点2】：INNER JOIN 引入 shelf_date 用于过滤
+    INNER JOIN product_base pb
+        ON CONCAT_WS('-', s.style_no, s.size) = pb.style_no_size
     WHERE s.brand = '韦德'
       AND s.channel_code IN ('wd', 'japan', 'spanish', 'germany')
     GROUP BY CONCAT_WS('-', s.style_no, s.size)
+),
+-- 【优化点1】：新增 CTE 提前算出 30天平均日销，避免主查询中重复计算 4 次
+sales_metrics AS (
+    SELECT 
+        pb.style_no_size,
+        pb.inventory_sku,
+        pb.shelf_date,
+        sa.cum_actual,
+        sa.last_30d_qty,
+        CASE
+            WHEN DATEDIFF(CURRENT_DATE(), pb.shelf_date) <= 0 THEN NULL
+            WHEN DATEDIFF(CURRENT_DATE(), pb.shelf_date) < 30
+                THEN CAST(COALESCE(sa.cum_actual, 0) AS DECIMAL(18,6)) / DATEDIFF(CURRENT_DATE(), pb.shelf_date)
+            ELSE CAST(COALESCE(sa.last_30d_qty, 0) AS DECIMAL(18,6)) / 30
+        END AS daily_avg_qty_30d
+    FROM product_base pb
+    LEFT JOIN sales_agg sa ON pb.style_no_size = sa.style_no_size
 )
 SELECT
     pb.style_no_size                                       AS style_no_size,
@@ -365,42 +386,21 @@ SELECT
          THEN pb.order_qty + pb.replenish_qty
          ELSE pb.order_qty
     END                                                    AS total_order_qty,
+    -- 【优化点2】：直接取预先算好的日销
     -- 口径3.12节：30天平均日销
     -- sold_days = DATEDIFF(CURRENT_DATE(), shelf_date) （排除今天）
-    CASE
-        WHEN DATEDIFF(CURRENT_DATE(), pb.shelf_date) <= 0 THEN NULL
-        WHEN DATEDIFF(CURRENT_DATE(), pb.shelf_date) < 30
-            THEN CAST(COALESCE(sa.cum_actual, 0) AS DECIMAL(18,6)) / DATEDIFF(CURRENT_DATE(), pb.shelf_date)
-        ELSE CAST(COALESCE(sa.last_30d_qty, 0) AS DECIMAL(18,6)) / 30
-    END                                                    AS daily_avg_qty_30d,
+    sm.daily_avg_qty_30d                                   AS daily_avg_qty_30d,
     -- 口径3.11节：可售周期 = 在仓库存 / 30天平均日销
+    -- 【优化点3】：基于预计算的日销，简化防除零逻辑
     CASE
-        WHEN (CASE
-            WHEN DATEDIFF(CURRENT_DATE(), pb.shelf_date) <= 0 THEN NULL
-            WHEN DATEDIFF(CURRENT_DATE(), pb.shelf_date) < 30
-                THEN CAST(COALESCE(sa.cum_actual, 0) AS DECIMAL(18,6)) / DATEDIFF(CURRENT_DATE(), pb.shelf_date)
-            ELSE CAST(COALESCE(sa.last_30d_qty, 0) AS DECIMAL(18,6)) / 30
-        END) IS NULL
-          OR (CASE
-            WHEN DATEDIFF(CURRENT_DATE(), pb.shelf_date) <= 0 THEN NULL
-            WHEN DATEDIFF(CURRENT_DATE(), pb.shelf_date) < 30
-                THEN CAST(COALESCE(sa.cum_actual, 0) AS DECIMAL(18,6)) / DATEDIFF(CURRENT_DATE(), pb.shelf_date)
-            ELSE CAST(COALESCE(sa.last_30d_qty, 0) AS DECIMAL(18,6)) / 30
-        END) = 0
-        THEN NULL
-        ELSE CAST(pb.inventory_sku AS DECIMAL(18,6)) /
-             (CASE
-                WHEN DATEDIFF(CURRENT_DATE(), pb.shelf_date) <= 0 THEN NULL
-                WHEN DATEDIFF(CURRENT_DATE(), pb.shelf_date) < 30
-                    THEN CAST(COALESCE(sa.cum_actual, 0) AS DECIMAL(18,6)) / DATEDIFF(CURRENT_DATE(), pb.shelf_date)
-                ELSE CAST(COALESCE(sa.last_30d_qty, 0) AS DECIMAL(18,6)) / 30
-             END)
+        WHEN sm.daily_avg_qty_30d IS NULL OR sm.daily_avg_qty_30d = 0 THEN NULL
+        ELSE CAST(pb.inventory_sku AS DECIMAL(18,6)) / sm.daily_avg_qty_30d
     END                                                    AS sellable_days,
     -- 口径3.19节：达成比例 = 累计销量 / 订货数量
-    CAST(COALESCE(sa.cum_actual, 0) AS DECIMAL(18,6))
-        / NULLIF(CAST(pb.order_qty AS DECIMAL(18,6)), 0) AS achievement_ratio,
+    CAST(COALESCE(sm.cum_actual, 0) AS DECIMAL(18,6))
+        / NULLIF(CAST(pb.order_qty AS DECIMAL(18,6)), 0)   AS achievement_ratio,
     -- 口径3.7节：已上架天数
-    DATEDIFF(CURRENT_DATE(), pb.shelf_date) + 1           AS lifecycle_day,
+    DATEDIFF(CURRENT_DATE(), pb.shelf_date) + 1            AS lifecycle_day,
     -- 口径3.8节：销售周期标签
     CASE
         WHEN DATEDIFF(CURRENT_DATE(), pb.shelf_date) + 1 BETWEEN 1 AND 30   THEN '新品期'
@@ -414,10 +414,12 @@ SELECT
     CURRENT_TIMESTAMP()                                    AS update_date
 FROM product_base pb
 LEFT JOIN available_inv ai   ON pb.style_no_size = ai.style_no_size
-LEFT JOIN sales_agg sa       ON pb.style_no_size = sa.style_no_size
+-- 【优化点4】：关联预算好的指标 CTE
+LEFT JOIN sales_metrics sm    ON pb.style_no_size = sm.style_no_size
 WHERE pb.style_no_size IS NOT NULL
   AND pb.style_no_size <> 'None'
   AND pb.shelf_date IS NOT NULL;
+
 ```
 
 ### 4.3 验证SQL
@@ -582,18 +584,39 @@ available_inv_skc AS (
     GROUP BY inv.style_no
 ),
 -- 4. SKC 销售汇总（口径5.12节 / 5.16节）：按 style_no 聚合，核心4渠道
+--    【修改点1】：关联 sku_base 获取补全后的 shelf_date，过滤上架前的异常销售记录
 sales_agg_skc AS (
     SELECT
         s.style_no                                         AS style_no,
-        COALESCE(SUM(CASE WHEN s.sales_date < CURRENT_DATE() THEN s.qty ELSE 0 END), 0)
-                                                          AS cum_actual,
+        COALESCE(SUM(CASE WHEN s.sales_date < CURRENT_DATE() 
+                          AND s.sales_date >= sb.shelf_date THEN s.qty ELSE 0 END), 0) AS cum_actual,
         COALESCE(SUM(CASE WHEN s.sales_date >= DATE_SUB(CURRENT_DATE(), 30)
-                          AND s.sales_date < CURRENT_DATE() THEN s.qty ELSE 0 END), 0)
-                                                          AS last_30d_qty
+                          AND s.sales_date < CURRENT_DATE()
+                          AND s.sales_date >= sb.shelf_date THEN s.qty ELSE 0 END), 0) AS last_30d_qty
     FROM feishu_dwd.dwd_feishu_sales_all_d s
+    -- 【修改点2】：INNER JOIN 引入 shelf_date 用于过滤
+    INNER JOIN sku_base sb
+        ON s.style_no = sb.style_no
     WHERE s.brand = '韦德'
       AND s.channel_code IN ('wd', 'japan', 'spanish', 'germany')
     GROUP BY s.style_no
+),
+-- 【优化点1】：新增 CTE 提前算出 SKC 30天平均日销，避免主查询中重复计算 4 次
+sales_metrics_skc AS (
+    SELECT 
+        sb.style_no,
+        sb.inventory_sku,
+        sb.shelf_date,
+        sa.cum_actual,
+        sa.last_30d_qty,
+        CASE
+            WHEN DATEDIFF(CURRENT_DATE(), sb.shelf_date) <= 0 THEN NULL
+            WHEN DATEDIFF(CURRENT_DATE(), sb.shelf_date) < 30
+                THEN CAST(COALESCE(sa.cum_actual, 0) AS DECIMAL(18,6)) / DATEDIFF(CURRENT_DATE(), sb.shelf_date)
+            ELSE CAST(COALESCE(sa.last_30d_qty, 0) AS DECIMAL(18,6)) / 30
+        END AS daily_avg_qty_30d
+    FROM sku_base sb
+    LEFT JOIN sales_agg_skc sa ON sb.style_no = sa.style_no
 )
 SELECT
     sb.style_no                                            AS style_no,
@@ -616,37 +639,16 @@ SELECT
          ELSE sb.order_qty
     END                                                    AS total_order_qty,
     -- 口径5.12节：SKC 30天平均日销
-    CASE
-        WHEN DATEDIFF(CURRENT_DATE(), sb.shelf_date) <= 0 THEN NULL
-        WHEN DATEDIFF(CURRENT_DATE(), sb.shelf_date) < 30
-            THEN CAST(COALESCE(sa.cum_actual, 0) AS DECIMAL(18,6)) / DATEDIFF(CURRENT_DATE(), sb.shelf_date)
-        ELSE CAST(COALESCE(sa.last_30d_qty, 0) AS DECIMAL(18,6)) / 30
-    END                                                    AS daily_avg_qty_30d,
+    -- 【优化点2】：直接取预先算好的日销
+    sm.daily_avg_qty_30d                                   AS daily_avg_qty_30d,
     -- 口径5.11节：SKC可售周期
+    -- 【优化点3】：基于预计算的日销，简化防除零逻辑
     CASE
-        WHEN (CASE
-            WHEN DATEDIFF(CURRENT_DATE(), sb.shelf_date) <= 0 THEN NULL
-            WHEN DATEDIFF(CURRENT_DATE(), sb.shelf_date) < 30
-                THEN CAST(COALESCE(sa.cum_actual, 0) AS DECIMAL(18,6)) / DATEDIFF(CURRENT_DATE(), sb.shelf_date)
-            ELSE CAST(COALESCE(sa.last_30d_qty, 0) AS DECIMAL(18,6)) / 30
-        END) IS NULL
-          OR (CASE
-            WHEN DATEDIFF(CURRENT_DATE(), sb.shelf_date) <= 0 THEN NULL
-            WHEN DATEDIFF(CURRENT_DATE(), sb.shelf_date) < 30
-                THEN CAST(COALESCE(sa.cum_actual, 0) AS DECIMAL(18,6)) / DATEDIFF(CURRENT_DATE(), sb.shelf_date)
-            ELSE CAST(COALESCE(sa.last_30d_qty, 0) AS DECIMAL(18,6)) / 30
-        END) = 0
-        THEN NULL
-        ELSE CAST(sb.inventory_sku AS DECIMAL(18,6)) /
-             (CASE
-                WHEN DATEDIFF(CURRENT_DATE(), sb.shelf_date) <= 0 THEN NULL
-                WHEN DATEDIFF(CURRENT_DATE(), sb.shelf_date) < 30
-                    THEN CAST(COALESCE(sa.cum_actual, 0) AS DECIMAL(18,6)) / DATEDIFF(CURRENT_DATE(), sb.shelf_date)
-                ELSE CAST(COALESCE(sa.last_30d_qty, 0) AS DECIMAL(18,6)) / 30
-             END)
+        WHEN sm.daily_avg_qty_30d IS NULL OR sm.daily_avg_qty_30d = 0 THEN NULL
+        ELSE CAST(sb.inventory_sku AS DECIMAL(18,6)) / sm.daily_avg_qty_30d
     END                                                    AS sellable_days,
     -- 口径5.19节：SKC达成比例
-    CAST(COALESCE(sa.cum_actual, 0) AS DECIMAL(18,6))
+    CAST(COALESCE(sm.cum_actual, 0) AS DECIMAL(18,6))
         / NULLIF(CAST(sb.order_qty AS DECIMAL(18,6)), 0) AS achievement_ratio,
     -- 口径5.7节：SKC已上架天数
     DATEDIFF(CURRENT_DATE(), sb.shelf_date) + 1           AS lifecycle_day,
@@ -663,10 +665,12 @@ SELECT
     CURRENT_TIMESTAMP()                                    AS update_date
 FROM sku_base sb
 LEFT JOIN available_inv_skc ai ON sb.style_no = ai.style_no
-LEFT JOIN sales_agg_skc sa   ON sb.style_no = sa.style_no
+-- 【优化点4】：关联预算好的指标 CTE
+LEFT JOIN sales_metrics_skc sm ON sb.style_no = sm.style_no
 WHERE sb.style_no IS NOT NULL
   AND sb.style_no <> 'None'
   AND sb.shelf_date IS NOT NULL;
+
 ```
 
 ### 5.3 验证SQL

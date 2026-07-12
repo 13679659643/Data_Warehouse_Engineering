@@ -223,20 +223,13 @@ CREATE TABLE IF NOT EXISTS feishu_ads.ads_sku_sales_plan_180d_d (
 ) ENGINE=OLAP
 PRIMARY KEY(`style_no_size`, `sale_date`)
 COMMENT "ADS层-SKU维度1~180天销售计划表(日刷新,韦德4核心渠道,核心表,QuickBI直接消费)"
-PARTITION BY RANGE(`sale_date`) ()
 DISTRIBUTED BY HASH(`style_no_size`) BUCKETS 32
 PROPERTIES (
     "compression" = "LZ4",
-    "enable_persistent_index" = "true",
+    "enable_persistent_index" = "true", 
     "fast_schema_evolution" = "true",
     "replicated_storage" = "true",
-    "replication_num" = "1",
-    "dynamic_partition.enable" = "true",
-    "dynamic_partition.time_unit" = "DAY",
-    "dynamic_partition.start" = "-730",
-    "dynamic_partition.end" = "3",
-    "dynamic_partition.prefix" = "p",
-    "dynamic_partition.history_partition_num" = "730"
+    "replication_num" = "1"
 );
 ```
 
@@ -532,20 +525,13 @@ CREATE TABLE IF NOT EXISTS feishu_ads.ads_skc_sales_plan_180d_d (
 ) ENGINE=OLAP
 PRIMARY KEY(`style_no`, `sale_date`)
 COMMENT "ADS层-SKC维度1~180天销售计划表(日刷新,韦德4核心渠道,核心表,QuickBI直接消费)"
-PARTITION BY RANGE(`sale_date`) ()
 DISTRIBUTED BY HASH(`style_no`) BUCKETS 32
 PROPERTIES (
     "compression" = "LZ4",
-    "enable_persistent_index" = "true",
+    "enable_persistent_index" = "true", 
     "fast_schema_evolution" = "true",
     "replicated_storage" = "true",
-    "replication_num" = "1",
-    "dynamic_partition.enable" = "true",
-    "dynamic_partition.time_unit" = "DAY",
-    "dynamic_partition.start" = "-730",
-    "dynamic_partition.end" = "3",
-    "dynamic_partition.prefix" = "p",
-    "dynamic_partition.history_partition_num" = "730"
+    "replication_num" = "1"
 );
 ```
 
@@ -580,7 +566,8 @@ product_info_skc AS (
         COALESCE(NULLIF(TRIM(pi.series), ''), 'None')       AS series,
         pi.product_name                                     AS product_name,
         pi.category                                         AS category,
-        COALESCE(pi.tag_price, 0)                           AS tag_price,
+        -- skc暂时没有吊牌价的逻辑
+        0                                                   AS tag_price,
         pi.first_sales_date                                 AS first_sales_date,
         pi.daily_avg_qty_30d                                AS daily_avg_qty_30d,
         pi.achievement_ratio                                AS achievement_ratio,
@@ -764,303 +751,18 @@ LIMIT 20;
 
 ---
 
-## 六、ADS表3：SKU/SKC汇总表 `ads_sku_skc_summary_d`
+## 六、QuickBI 对接说明
 
-> 用途：QuickBI 展示 SKU/SKC 汇总信息（不区分日期，提供当前状态快照）
-> 粒度：`dim_type + dim_value`（dim_type='SKU'时dim_value=style_no_size；dim_type='SKC'时dim_value=style_no）
-> 来源：`feishu_dws.dws_sku_product_info_d` + `feishu_dws.dws_skc_product_info_d` + 对应销售计划表
-
-### 6.1 DDL
-
-```sql
-DROP TABLE IF EXISTS feishu_ads.ads_sku_skc_summary_d;
-
-CREATE TABLE IF NOT EXISTS feishu_ads.ads_sku_skc_summary_d (
-    -- 1. Key 列（前 N 列，≤3列）
-    `dim_type`                 VARCHAR(10)     COMMENT "维度类型(SKU/SKC)",
-    `dim_value`                VARCHAR(255)    COMMENT "维度值(SKU=style_no_size,SKC=style_no)",
-    -- 2. 维度属性
-    `brand`                    VARCHAR(20)     COMMENT "品牌",
-    `style_no`                 VARCHAR(128)    COMMENT "款号/SKC编码",
-    `ip`                       VARCHAR(100)    COMMENT "IP(空值兜底None)",
-    `series`                   VARCHAR(100)    COMMENT "系列(空值兜底None)",
-    `product_name`             VARCHAR(500)    COMMENT "商品名称",
-    `shelf_date`               DATE            COMMENT "上架日期",
-    `first_sales_date`         DATE            COMMENT "首次销售日期",
-    -- 3. 当前状态
-    `lifecycle_day`            BIGINT          COMMENT "当日已上架天数",
-    `sales_cycle_label`        VARCHAR(50)     COMMENT "销售周期标签(新品期/热销期/清货期/超周期)",
-    -- 4. 订货指标
-    `order_qty`                BIGINT          COMMENT "订货数量Q",
-    `total_order_qty`          BIGINT          COMMENT "总订货数量(订货+补货)",
-    -- 5. 销售累计指标
-    `cum_qty`                  BIGINT          COMMENT "累计销量(截至昨日)",
-    `cum_amt`                  DECIMAL(18,6)   COMMENT "累计金额(截至昨日)",
-    -- 6. 库存指标
-    `inventory_qty`            BIGINT          COMMENT "在仓库存(SKU=inventory_sku,SKC=inventory_skc)",
-    `available_inventory`      BIGINT          COMMENT "可提库存",
-    `daily_avg_qty_30d`        DECIMAL(18,6)   COMMENT "30天平均日销",
-    `sellable_days`            DECIMAL(18,6)   COMMENT "可售周期天数",
-    -- 7. 达成指标
-    `achievement_ratio`        DECIMAL(18,6)   COMMENT "达成比例(累计销量/订货数量)",
-    `yesterday_actual_qty`     BIGINT          COMMENT "昨日实际销售",
-    `today_plan_qty`           DECIMAL(18,6)   COMMENT "今日计划销售数量(超周期为0)",
-    -- 8. 技术字段
-    `sync_time`                DATETIME        COMMENT "ODS同步时间",
-    `insert_date`              DATETIME        COMMENT "ADS记录插入时间(ETL写入)",
-    `update_date`              DATETIME        COMMENT "ADS记录更新时间(ETL写入)"
-) ENGINE=OLAP
-PRIMARY KEY(`dim_type`, `dim_value`)
-COMMENT "ADS层-SKU/SKC汇总表(日刷新,韦德4核心渠道,辅助表,QuickBI展示汇总信息)"
-DISTRIBUTED BY HASH(`dim_value`) BUCKETS 16
-PROPERTIES (
-    "compression" = "LZ4",
-    "enable_persistent_index" = "true",
-    "fast_schema_evolution" = "true",
-    "replicated_storage" = "true",
-    "replication_num" = "1"
-);
-```
-
-### 6.2 ETL
-
-```sql
--- ============================================================
--- ETL: feishu_ads.ads_sku_skc_summary_d
--- 粒度：dim_type + dim_value
--- 来源：feishu_dws.dws_sku_product_info_d + feishu_dws.dws_skc_product_info_d
---        + feishu_dws.dws_sku_sales_plan_180d_d + feishu_dws.dws_skc_sales_plan_180d_d
--- 口径：3.1~3.25节、5.1~5.25节
--- 说明：UNION ALL SKU 与 SKC 汇总数据
--- ============================================================
-TRUNCATE TABLE feishu_ads.ads_sku_skc_summary_d;
-
-INSERT INTO feishu_ads.ads_sku_skc_summary_d (
-    dim_type, dim_value, brand, style_no, ip, series, product_name,
-    shelf_date, first_sales_date, lifecycle_day, sales_cycle_label,
-    order_qty, total_order_qty, cum_qty, cum_amt, inventory_qty,
-    available_inventory, daily_avg_qty_30d, sellable_days,
-    achievement_ratio, yesterday_actual_qty, today_plan_qty,
-    sync_time, insert_date, update_date
-)
-WITH
--- 1. SKU 维度汇总（口径3.1~3.25节）
-sku_summary AS (
-    SELECT
-        'SKU'                                                    AS dim_type,
-        pi.style_no_size                                         AS dim_value,
-        pi.brand                                                 AS brand,
-        pi.style_no                                              AS style_no,
-        COALESCE(NULLIF(TRIM(pi.ip), ''), 'None')               AS ip,
-        COALESCE(NULLIF(TRIM(pi.series), ''), 'None')           AS series,
-        pi.product_name                                          AS product_name,
-        pi.shelf_date                                            AS shelf_date,
-        pi.first_sales_date                                      AS first_sales_date,
-        pi.lifecycle_day                                         AS lifecycle_day,
-        pi.sales_cycle_label                                     AS sales_cycle_label,
-        COALESCE(pi.order_qty, 0)                                AS order_qty,
-        COALESCE(pi.total_order_qty, 0)                          AS total_order_qty,
-        -- 口径3.16节：累计销量（截至昨日）
-        COALESCE(sp.cum_actual_total, 0)                         AS cum_qty,
-        -- 口径3.17节：累计金额（截至昨日）
-        COALESCE(sp.cum_amt_total, 0)                            AS cum_amt,
-        -- 口径3.9节：在仓库存
-        COALESCE(pi.inventory_sku, 0)                            AS inventory_qty,
-        -- 口径3.10节：可提库存
-        COALESCE(pi.available_inventory, 0)                      AS available_inventory,
-        -- 口径3.12节：30天平均日销
-        pi.daily_avg_qty_30d                                     AS daily_avg_qty_30d,
-        -- 口径3.11节：可售周期
-        pi.sellable_days                                         AS sellable_days,
-        -- 口径3.19节：达成比例
-        pi.achievement_ratio                                     AS achievement_ratio,
-        -- 口径3.21节：昨日实际销售
-        COALESCE(sp.yesterday_actual_qty, 0)                     AS yesterday_actual_qty,
-        -- 口径3.25节：今日计划销售数量（超周期为0）
-        COALESCE(sp.today_plan_qty, 0)                           AS today_plan_qty,
-        pi.sync_time                                             AS sync_time
-    FROM feishu_dws.dws_sku_product_info_d pi
-    LEFT JOIN (
-        SELECT
-            sp.style_no_size                                     AS style_no_size,
-            -- 累计销量（截至昨日）
-            SUM(CASE WHEN sp.sale_date < CURRENT_DATE()
-                     THEN COALESCE(sp.actual_qty, 0) ELSE 0 END) AS cum_actual_total,
-            -- 累计金额（截至昨日）
-            SUM(CASE WHEN sp.sale_date < CURRENT_DATE()
-                     THEN COALESCE(sp.actual_amt, 0) ELSE 0 END) AS cum_amt_total,
-            -- 昨日实际销售
-            SUM(CASE WHEN sp.sale_date = DATE_SUB(CURRENT_DATE(), 1)
-                     THEN COALESCE(sp.actual_qty, 0) ELSE 0 END) AS yesterday_actual_qty,
-            -- 今日计划销售数量
-            SUM(CASE WHEN sp.sale_date = CURRENT_DATE()
-                     THEN COALESCE(sp.plan_post, 0) ELSE 0 END)  AS today_plan_qty
-        FROM feishu_dws.dws_sku_sales_plan_180d_d sp
-        GROUP BY sp.style_no_size
-    ) sp ON pi.style_no_size = sp.style_no_size
-),
--- 2. SKC 维度汇总（口径5.1~5.25节）
-skc_summary AS (
-    SELECT
-        'SKC'                                                    AS dim_type,
-        pi.style_no                                              AS dim_value,
-        pi.brand                                                 AS brand,
-        pi.style_no                                              AS style_no,
-        COALESCE(NULLIF(TRIM(pi.ip), ''), 'None')               AS ip,
-        COALESCE(NULLIF(TRIM(pi.series), ''), 'None')           AS series,
-        pi.product_name                                          AS product_name,
-        pi.shelf_date                                            AS shelf_date,
-        pi.first_sales_date                                      AS first_sales_date,
-        pi.lifecycle_day                                         AS lifecycle_day,
-        pi.sales_cycle_label                                     AS sales_cycle_label,
-        COALESCE(pi.order_qty, 0)                                AS order_qty,
-        COALESCE(pi.total_order_qty, 0)                          AS total_order_qty,
-        -- 口径5.16节：SKC累计销量
-        COALESCE(sp.cum_actual_total, 0)                         AS cum_qty,
-        -- 口径5.17节：SKC累计金额
-        COALESCE(sp.cum_amt_total, 0)                            AS cum_amt,
-        -- 口径5.9节：SKC在仓库存
-        COALESCE(pi.inventory_sku, 0)                            AS inventory_qty,
-        -- 口径5.10节：SKC可提库存
-        COALESCE(pi.available_inventory, 0)                      AS available_inventory,
-        -- 口径5.12节：30天平均日销
-        pi.daily_avg_qty_30d                                     AS daily_avg_qty_30d,
-        -- 口径5.11节：可售周期
-        pi.sellable_days                                         AS sellable_days,
-        -- 口径5.19节：达成比例
-        pi.achievement_ratio                                     AS achievement_ratio,
-        -- 口径5.21节：昨日实际销售
-        COALESCE(sp.yesterday_actual_qty, 0)                     AS yesterday_actual_qty,
-        -- 口径5.25节：今日计划销售数量
-        COALESCE(sp.today_plan_qty, 0)                           AS today_plan_qty,
-        pi.sync_time                                             AS sync_time
-    FROM feishu_dws.dws_skc_product_info_d pi
-    LEFT JOIN (
-        SELECT
-            sp.style_no                                          AS style_no,
-            -- 累计销量（截至昨日）
-            SUM(CASE WHEN sp.sale_date < CURRENT_DATE()
-                     THEN COALESCE(sp.actual_qty, 0) ELSE 0 END) AS cum_actual_total,
-            -- 累计金额（截至昨日）
-            SUM(CASE WHEN sp.sale_date < CURRENT_DATE()
-                     THEN COALESCE(sp.actual_amt, 0) ELSE 0 END) AS cum_amt_total,
-            -- 昨日实际销售
-            SUM(CASE WHEN sp.sale_date = DATE_SUB(CURRENT_DATE(), 1)
-                     THEN COALESCE(sp.actual_qty, 0) ELSE 0 END) AS yesterday_actual_qty,
-            -- 今日计划销售数量
-            SUM(CASE WHEN sp.sale_date = CURRENT_DATE()
-                     THEN COALESCE(sp.plan_post, 0) ELSE 0 END)  AS today_plan_qty
-        FROM feishu_dws.dws_skc_sales_plan_180d_d sp
-        GROUP BY sp.style_no
-    ) sp ON pi.style_no = sp.style_no
-)
--- 3. UNION ALL 合并 SKU 与 SKC
-SELECT
-    s.dim_type                                                AS dim_type,
-    s.dim_value                                               AS dim_value,
-    s.brand                                                   AS brand,
-    s.style_no                                                AS style_no,
-    s.ip                                                      AS ip,
-    s.series                                                  AS series,
-    s.product_name                                            AS product_name,
-    s.shelf_date                                              AS shelf_date,
-    s.first_sales_date                                        AS first_sales_date,
-    s.lifecycle_day                                           AS lifecycle_day,
-    s.sales_cycle_label                                       AS sales_cycle_label,
-    s.order_qty                                               AS order_qty,
-    s.total_order_qty                                         AS total_order_qty,
-    s.cum_qty                                                 AS cum_qty,
-    s.cum_amt                                                 AS cum_amt,
-    s.inventory_qty                                           AS inventory_qty,
-    s.available_inventory                                     AS available_inventory,
-    s.daily_avg_qty_30d                                       AS daily_avg_qty_30d,
-    s.sellable_days                                           AS sellable_days,
-    s.achievement_ratio                                       AS achievement_ratio,
-    s.yesterday_actual_qty                                    AS yesterday_actual_qty,
-    s.today_plan_qty                                          AS today_plan_qty,
-    s.sync_time                                               AS sync_time,
-    CURRENT_TIMESTAMP()                                       AS insert_date,
-    CURRENT_TIMESTAMP()                                       AS update_date
-FROM (
-    SELECT * FROM sku_summary
-    UNION ALL
-    SELECT * FROM skc_summary
-) s;
-```
-
-### 6.3 验证SQL
-
-```sql
--- 1. 行数核验：汇总表行数 = SKU 数 + SKC 数
-SELECT
-    (SELECT COUNT(*) FROM feishu_ads.ads_sku_skc_summary_d WHERE dim_type = 'SKU') AS sku_cnt,
-    (SELECT COUNT(*) FROM feishu_ads.ads_sku_skc_summary_d WHERE dim_type = 'SKC') AS skc_cnt,
-    (SELECT COUNT(*) FROM feishu_ads.ads_sku_skc_summary_d)                         AS total_cnt;
-
--- 2. 抽样：查看 SKU 汇总
-SELECT dim_type, dim_value, brand, style_no, ip, series, product_name,
-       shelf_date, lifecycle_day, sales_cycle_label,
-       order_qty, total_order_qty, cum_qty, cum_amt, inventory_qty,
-       available_inventory, daily_avg_qty_30d, sellable_days,
-       achievement_ratio, yesterday_actual_qty, today_plan_qty
-FROM feishu_ads.ads_sku_skc_summary_d
-WHERE dim_type = 'SKU'
-ORDER BY cum_qty DESC
-LIMIT 20;
-
--- 3. 抽样：查看 SKC 汇总
-SELECT dim_type, dim_value, brand, style_no, ip, series, product_name,
-       shelf_date, lifecycle_day, sales_cycle_label,
-       order_qty, total_order_qty, cum_qty, cum_amt, inventory_qty,
-       available_inventory, daily_avg_qty_30d, sellable_days,
-       achievement_ratio, yesterday_actual_qty, today_plan_qty
-FROM feishu_ads.ads_sku_skc_summary_d
-WHERE dim_type = 'SKC'
-ORDER BY cum_qty DESC
-LIMIT 20;
-
--- 4. 校验：SKU 数量与 DWS 商品维表一致
-SELECT
-    (SELECT COUNT(*) FROM feishu_ads.ads_sku_skc_summary_d WHERE dim_type = 'SKU') AS ads_sku_cnt,
-    (SELECT COUNT(*) FROM feishu_dws.dws_sku_product_info_d)                        AS dws_sku_cnt;
-
--- 5. 校验：SKC 数量与 DWS 商品维表一致
-SELECT
-    (SELECT COUNT(*) FROM feishu_ads.ads_sku_skc_summary_d WHERE dim_type = 'SKC') AS ads_skc_cnt,
-    (SELECT COUNT(*) FROM feishu_dws.dws_skc_product_info_d)                        AS dws_skc_cnt;
-
--- 6. 校验：达成比例 = 累计销量 / 订货数量
-SELECT dim_type, dim_value, cum_qty, order_qty, achievement_ratio,
-       CAST(cum_qty AS DECIMAL(18,6)) / NULLIF(CAST(order_qty AS DECIMAL(18,6)), 0) AS calc_ratio
-FROM feishu_ads.ads_sku_skc_summary_d
-WHERE order_qty > 0
-  AND ABS(achievement_ratio -
-          CAST(cum_qty AS DECIMAL(18,6)) / NULLIF(CAST(order_qty AS DECIMAL(18,6)), 0)) > 0.001
-LIMIT 50;
-
--- 7. ⚠️ 财务字段人工审查：累计金额
-SELECT dim_type, dim_value, cum_qty, cum_amt, order_qty, achievement_ratio
-FROM feishu_ads.ads_sku_skc_summary_d
-WHERE cum_amt > 0
-ORDER BY cum_amt DESC
-LIMIT 50;
-```
-
----
-
-## 七、QuickBI 对接说明
-
-### 7.1 数据集配置
+### 6.1 数据集配置
 
 | ADS 表 | QuickBI 数据集 | 展示维度 | 主要图表 |
 |--------|--------------|---------|---------|
 | `ads_sku_sales_plan_180d_d` | SKU销售计划 | style_no_size, sale_date | 折线图（计划vs实际）、柱状图（达成率）、明细表 |
 | `ads_skc_sales_plan_180d_d` | SKC销售计划 | style_no, sale_date | 同上 |
-| `ads_sku_skc_summary_d` | SKU/SKC汇总 | dim_type, dim_value | 仪表盘（达成比例）、排行榜（累计销量Top） |
 
-### 7.2 字段使用建议
+### 6.2 字段使用建议
 
-#### 7.2.1 维度字段（用于筛选/分组）
+#### 6.2.1 维度字段（用于筛选/分组）
 
 | 字段 | 用途 | 说明 |
 |------|------|------|
@@ -1073,7 +775,7 @@ LIMIT 50;
 | `ip` / `series` / `category` | 文本维度 | 商品属性分组 |
 | `is_over_cycle` | 数值维度 | 0=正常周期, 1=超周期 |
 
-#### 7.2.2 度量字段（用于聚合/计算）
+#### 6.2.2 度量字段（用于聚合/计算）
 
 | 字段 | 聚合方式 | 说明 |
 |------|---------|------|
@@ -1086,7 +788,7 @@ LIMIT 50;
 | `yesterday_actual_qty` | MAX | 昨日实际（快照，取最大值） |
 | `today_plan_qty` | MAX | 今日计划（快照） |
 
-#### 7.2.3 典型图表配置
+#### 6.2.3 典型图表配置
 
 **图表1：1~180天销售计划vs实际（折线图）**
 - X轴：`lifecycle_day`（1~180）
@@ -1109,7 +811,7 @@ LIMIT 50;
 - 度量：`yesterday_actual_qty`（SUM）、`today_plan_qty`（SUM）
 - 筛选：`dim_type = 'SKU'` 或 `'SKC'`
 
-### 7.3 QuickBI 注意事项
+### 6.3 QuickBI 注意事项
 
 1. **超周期数据处理**：展示1~180天计划时，筛选 `is_over_cycle = 0` 或 `lifecycle_day BETWEEN 1 AND 180`
 2. **累计指标**：`cum_qty` / `cum_amt` 在时间序列中随日期递增，展示时取对应日期的值即可
@@ -1120,9 +822,9 @@ LIMIT 50;
 
 ---
 
-## 八、关键业务规则速查
+## 七、关键业务规则速查
 
-### 8.1 渠道与品牌过滤
+### 7.1 渠道与品牌过滤
 
 | 场景 | 条件 | 说明 |
 |------|------|------|
@@ -1131,7 +833,7 @@ LIMIT 50;
 
 > **ADS 层无需重复过滤渠道条件**
 
-### 8.2 维度键
+### 7.2 维度键
 
 | 维度 | 键 | ADS 表 |
 |------|-----|--------|
@@ -1139,7 +841,7 @@ LIMIT 50;
 | SKC | `style_no` | ads_skc_sales_plan_180d_d |
 | 混合 | `dim_type + dim_value` | ads_sku_skc_summary_d |
 
-### 8.3 时间基准
+### 7.3 时间基准
 
 | 字段 | SKU | SKC |
 |------|-----|-----|
@@ -1147,7 +849,7 @@ LIMIT 50;
 | 上市第N天 | `DATEDIFF(sale_date, shelf_date) + 1` | `DATEDIFF(sale_date, MIN(shelf_date)) + 1` |
 | 已售天数 | `N - 1`（排除今天） | `N - 1` |
 
-### 8.4 阶段与比例
+### 7.4 阶段与比例
 
 | 阶段 | lifecycle_day | ratio | sales_phase |
 |------|--------------|-------|-------------|
@@ -1156,7 +858,7 @@ LIMIT 50;
 | 清货期 | 121~180 | 1.0 | 清货期 |
 | 超周期 | >180 | NULL | 超周期 |
 
-### 8.5 销售计划公式
+### 7.5 销售计划公式
 
 | 指标 | 公式 | 适用 | ADS 字段 |
 |------|------|------|---------|
@@ -1168,7 +870,7 @@ LIMIT 50;
 > **cum_actual(N)** = 截至第 **N-1** 天的实际销量总和（不含当天N），来自 DWS 层
 > **cum_qty** (ADS) = `cum_actual + actual_qty` = 截至第 **N** 天的累计（含当天）
 
-### 8.6 sale_date_label 格式
+### 7.6 sale_date_label 格式
 
 | lifecycle_day | sale_date_label |
 |--------------|-----------------|
@@ -1177,7 +879,7 @@ LIMIT 50;
 | 180 | 第180天 |
 | >180 | 超周期 |
 
-### 8.7 库存口径
+### 7.7 库存口径
 
 | 字段 | SKU | SKC | ADS 字段 |
 |------|-----|-----|---------|
@@ -1185,7 +887,7 @@ LIMIT 50;
 | 可提库存 | 最新 `inventory_date` 按 sku 聚合 | 最新 `inventory_date` 按 style_no 聚合 | `available_inventory` |
 | 可售周期 | 在仓库存 / 30天平均日销 | 同 SKU | `sellable_days` |
 
-### 8.8 当前快照指标
+### 7.8 当前快照指标
 
 | 指标 | 口径 | ADS 字段 | 聚合方式 |
 |------|------|---------|---------|
@@ -1197,7 +899,7 @@ LIMIT 50;
 
 > **快照指标说明**：这些指标反映"当前状态"，对同一 SKU/SKC 的所有行值相同，通过子查询 + JOIN 广播到每一行。
 
-### 8.9 ⚠️ 财务/库存人工审查提醒
+### 7.9 ⚠️ 财务/库存人工审查提醒
 
 以下字段涉及财务金额或库存数据，**上线前必须人工审查**：
 
@@ -1208,7 +910,7 @@ LIMIT 50;
 5. **`sellable_days`**：可售周期依赖 30天平均日销，当日销为0时返回 NULL，需确认业务上是否需要兜底值
 6. **`achievement_ratio` / `7d_achievement` / `30d_achievement`**：达成率指标，分母为0时返回 NULL，需确认业务展示逻辑
 
-### 8.10 字段映射总表（ADS ← DWS ← 口径）
+### 7.10 字段映射总表（ADS ← DWS ← 口径）
 
 | ADS 字段 | DWS 来源 | 口径章节 | 说明 |
 |---------|---------|---------|------|
@@ -1246,27 +948,25 @@ LIMIT 50;
 
 ---
 
-## 九、部署与调度建议
+## 八、部署与调度建议
 
-### 9.1 执行顺序
+### 8.1 执行顺序
 
 ```
 1. ads_sku_sales_plan_180d_d   （依赖 dws_sku_sales_plan_180d_d + dws_sku_product_info_d）
 2. ads_skc_sales_plan_180d_d   （依赖 dws_skc_sales_plan_180d_d + dws_skc_product_info_d）
-3. ads_sku_skc_summary_d       （依赖 dws_sku/skc_product_info_d + dws_sku/skc_sales_plan_180d_d）
 ```
 
 > **前置依赖**：DWS 层 6 张表必须全部刷新完成
 
-### 9.2 刷新策略
+### 8.2 刷新策略
 
 | 表 | 刷新方式 | 说明 |
 |----|---------|------|
 | ads_sku_sales_plan_180d_d | 全量 TRUNCATE + INSERT | 每日全量重算，数据量大 |
 | ads_skc_sales_plan_180d_d | 全量 TRUNCATE + INSERT | 每日全量重算 |
-| ads_sku_skc_summary_d | 全量 TRUNCATE + INSERT | 每日全量重算 |
 
-### 9.3 性能优化建议
+### 8.3 性能优化建议
 
 1. **核心表数据量大**：SKU数 × 天数（180+超周期），建议按 `sale_date` 分区查询
 2. **JOIN 优化**：ADS 表主要 JOIN 商品维表（小表），使用 BROADCAST JOIN
@@ -1276,9 +976,9 @@ LIMIT 50;
 
 ---
 
-## 十、附录：StarRocks 语法兼容性说明
+## 九、附录：StarRocks 语法兼容性说明
 
-### 10.1 反引号转义
+### 9.1 反引号转义
 
 `7d_achievement` / `30d_achievement` 以数字开头，在 SQL 中必须用反引号包裹：
 
@@ -1292,7 +992,7 @@ INSERT INTO ... (`7d_achievement`, `30d_achievement`, ...)
 SELECT ... AS `7d_achievement`, ... AS `30d_achievement`
 ```
 
-### 10.2 日期函数
+### 9.2 日期函数
 
 ```sql
 DATE_SUB(CURRENT_DATE(), 1)          -- 昨日
@@ -1301,7 +1001,7 @@ CURRENT_DATE()                       -- 今日
 DATEDIFF(end_date, start_date)       -- 日期差（天数）
 ```
 
-### 10.3 空值处理
+### 9.3 空值处理
 
 ```sql
 COALESCE(col, 0)                     -- 数值空值兜底0
