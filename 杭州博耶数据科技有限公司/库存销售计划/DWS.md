@@ -98,10 +98,11 @@
 ### 3.1 shelf_date 补全（口径3.5节 / 5.5节）
 
 ```sql
--- SKU维度：优先取 product_all_d.shelf_date，为空则关联 brand_order_arrival_d.`30_est_arrival_date`
+-- SKU维度：优先取 product_all_d.shelf_date，为空则关联 brand_order_arrival_d 的最早 30_est_arrival_date
+-- 注意：同一 style_no_size 可能有多条记录，须先聚合取 MIN(30_est_arrival_date)，避免一对多导致数据膨胀
 COALESCE(
     NULLIF(p.shelf_date, DATE('1970-01-01')),
-    boa.`30_est_arrival_date`
+    boa.est_arrival_date   -- 来源于子查询：SELECT style_no_size, MIN(`30_est_arrival_date`) ... GROUP BY style_no_size
 ) AS shelf_date
 -- 关联条件：CONCAT_WS('-', p.style_no, p.size) = boa.style_no_size
 ```
@@ -245,20 +246,13 @@ CREATE TABLE IF NOT EXISTS feishu_dws.dws_sku_product_info_d (
 ) ENGINE=OLAP
 PRIMARY KEY(`style_no_size`)
 COMMENT "DWS层-SKU商品维表"
-PARTITION BY RANGE(`shelf_date`) ()
 DISTRIBUTED BY HASH(`style_no_size`) BUCKETS 16
 PROPERTIES (
     "compression" = "LZ4",
-    "enable_persistent_index" = "true",
+    "enable_persistent_index" = "true", 
     "fast_schema_evolution" = "true",
     "replicated_storage" = "true",
-    "replication_num" = "1",
-    "dynamic_partition.enable" = "true",
-    "dynamic_partition.time_unit" = "DAY",
-    "dynamic_partition.start" = "-365",
-    "dynamic_partition.end" = "3",
-    "dynamic_partition.prefix" = "p",
-    "dynamic_partition.history_partition_num" = "365"
+    "replication_num" = "1"
 );
 ```
 
@@ -282,7 +276,18 @@ INSERT INTO feishu_dws.dws_sku_product_info_d (
     sync_time, insert_date, update_date
 )
 WITH
--- 1. 商品库基础信息 + shelf_date 补全（口径3.5节）
+-- 1. brand_order_arrival_d 按 style_no_size 聚合，30_est_arrival_date 取最早时间（口径3.5节）
+--    原因：同一 style_no_size 可能有多条记录，补全 shelf_date 时取最早的 30_est_arrival_date
+boa_agg AS (
+    SELECT
+        boa.style_no_size                                  AS style_no_size,
+        COALESCE(SUM(boa.order_qty), 0)                    AS order_qty,
+        MIN(boa.`30_est_arrival_date`)                     AS est_arrival_date
+    FROM feishu_dwd.dwd_feishu_brand_order_arrival_d boa
+    GROUP BY boa.style_no_size
+),
+-- 2. 商品库基础信息 + shelf_date 补全（口径3.5节）
+--    shelf_date 优先取 product_all_d.shelf_date，为空取 boa_agg.est_arrival_date（最早时间）
 product_base AS (
     SELECT
         CONCAT_WS('-', p.style_no, p.size)                 AS style_no_size,
@@ -295,52 +300,38 @@ product_base AS (
         p.product_name                                     AS product_name,
         p.category                                         AS category,
         COALESCE(p.tag_price, 0)                           AS tag_price,
-        -- 口径3.5节：shelf_date 优先取 product_all_d.shelf_date，为空取 30_est_arrival_date
+        -- 口径3.5节：shelf_date 优先取 product_all_d.shelf_date，为空取最早的 30_est_arrival_date
         COALESCE(
             NULLIF(p.shelf_date, DATE('1970-01-01')),
-            boa.`30_est_arrival_date`
+            boa.est_arrival_date
         )                                                  AS shelf_date,
         NULLIF(p.first_sales_date, DATE('1970-01-01'))     AS first_sales_date,
         COALESCE(p.inventory_sku, 0)                       AS inventory_sku,
-        COALESCE(p.order_qty, 0)                           AS product_order_qty,
         COALESCE(p.replenish_qty, 0)                       AS replenish_qty,
         COALESCE(p.is_replenish, '否')                     AS is_replenish,
-        p.sync_time                                        AS sync_time
+        p.sync_time                                        AS sync_time,
+        -- 订货数量 Q（口径3.18节）：按 style_no_size 关联
+        COALESCE(boa.order_qty, 0)                         AS order_qty
     FROM feishu_dwd.dwd_feishu_product_all_d p
-    LEFT JOIN feishu_dwd.dwd_feishu_brand_order_arrival_d boa
+    LEFT JOIN boa_agg boa
         ON CONCAT_WS('-', p.style_no, p.size) = boa.style_no_size
     WHERE p.brand = '韦德'
 ),
--- 2. 订货数量 Q（口径3.18节）：按 style_no_size 关联
-order_qty_agg AS (
-    SELECT
-        boa.style_no_size                                  AS style_no_size,
-        COALESCE(SUM(boa.order_qty), 0)                    AS order_qty
-    FROM feishu_dwd.dwd_feishu_brand_order_arrival_d boa
-    GROUP BY boa.style_no_size
-),
--- 3. 可提库存（口径3.10节）：取最新 inventory_date，按 sku 聚合
-latest_inv_date AS (
-    SELECT sku, MAX(inventory_date) AS max_date
-    FROM feishu_dwd.dwd_feishu_inventory_wdpinpai_d
-    GROUP BY sku
-),
+-- 3. 可提库存（口径3.10节）：取最新 inventory_date，按 style_no_size 聚合（一步完成）
 available_inv AS (
     SELECT
-        inv.sku                                            AS sku,
-        COALESCE(SUM(inv.inventory_qty), 0)                AS available_inventory
+        CONCAT_WS('-', inv.style_no, inv.size)             AS style_no_size,
+        COALESCE(SUM(inv.inventory_qty), 0)                AS available_inventory,
+        MAX(inv.inventory_date) AS max_date
     FROM feishu_dwd.dwd_feishu_inventory_wdpinpai_d inv
-    INNER JOIN latest_inv_date lid
-        ON inv.sku = lid.sku
-       AND inv.inventory_date = lid.max_date
-    GROUP BY inv.sku
+    GROUP BY CONCAT_WS('-', inv.style_no, inv.size)
 ),
--- 4. 销售汇总（口径3.12节 / 3.16节）：核心4渠道
+-- 4. 销售汇总（口径3.12节 / 3.16节）：核心4渠道，按 style_no_size 聚合
 --    累计销量 = shelf_date ~ 昨日 的 SUM(qty)
 --    最近30天销量 = 最近30天（含昨日）的 SUM(qty)
 sales_agg AS (
     SELECT
-        s.sku                                              AS sku,
+        CONCAT_WS('-', s.style_no, s.size)                 AS style_no_size,
         COALESCE(SUM(CASE WHEN s.sales_date < CURRENT_DATE() THEN s.qty ELSE 0 END), 0)
                                                           AS cum_actual,
         COALESCE(SUM(CASE WHEN s.sales_date >= DATE_SUB(CURRENT_DATE(), 30)
@@ -349,7 +340,7 @@ sales_agg AS (
     FROM feishu_dwd.dwd_feishu_sales_all_d s
     WHERE s.brand = '韦德'
       AND s.channel_code IN ('wd', 'japan', 'spanish', 'germany')
-    GROUP BY s.sku
+    GROUP BY CONCAT_WS('-', s.style_no, s.size)
 )
 SELECT
     pb.style_no_size                                       AS style_no_size,
@@ -366,13 +357,13 @@ SELECT
     pb.first_sales_date                                    AS first_sales_date,
     pb.inventory_sku                                       AS inventory_sku,
     COALESCE(ai.available_inventory, 0)                    AS available_inventory,
-    COALESCE(oq.order_qty, 0)                              AS order_qty,
+    pb.order_qty                                           AS order_qty,
     pb.replenish_qty                                       AS replenish_qty,
     pb.is_replenish                                        AS is_replenish,
     -- 口径3.20节：总订货数量
     CASE WHEN pb.is_replenish = '是'
-         THEN COALESCE(oq.order_qty, 0) + pb.replenish_qty
-         ELSE COALESCE(oq.order_qty, 0)
+         THEN pb.order_qty + pb.replenish_qty
+         ELSE pb.order_qty
     END                                                    AS total_order_qty,
     -- 口径3.12节：30天平均日销
     -- sold_days = DATEDIFF(CURRENT_DATE(), shelf_date) （排除今天）
@@ -407,7 +398,7 @@ SELECT
     END                                                    AS sellable_days,
     -- 口径3.19节：达成比例 = 累计销量 / 订货数量
     CAST(COALESCE(sa.cum_actual, 0) AS DECIMAL(18,6))
-        / NULLIF(CAST(COALESCE(oq.order_qty, 0) AS DECIMAL(18,6)), 0) AS achievement_ratio,
+        / NULLIF(CAST(pb.order_qty AS DECIMAL(18,6)), 0) AS achievement_ratio,
     -- 口径3.7节：已上架天数
     DATEDIFF(CURRENT_DATE(), pb.shelf_date) + 1           AS lifecycle_day,
     -- 口径3.8节：销售周期标签
@@ -422,9 +413,8 @@ SELECT
     CURRENT_TIMESTAMP()                                    AS insert_date,
     CURRENT_TIMESTAMP()                                    AS update_date
 FROM product_base pb
-LEFT JOIN order_qty_agg oq   ON pb.style_no_size = oq.style_no_size
-LEFT JOIN available_inv ai   ON pb.style_no = ai.sku  -- 注意：product_all_d.sku 对应 inventory 表的 sku
-LEFT JOIN sales_agg sa       ON pb.style_no = sa.sku  -- 注意：product_all_d.sku 对应 sales 表的 sku
+LEFT JOIN available_inv ai   ON pb.style_no_size = ai.style_no_size
+LEFT JOIN sales_agg sa       ON pb.style_no_size = sa.style_no_size
 WHERE pb.style_no_size IS NOT NULL
   AND pb.style_no_size <> 'None'
   AND pb.shelf_date IS NOT NULL;
@@ -505,20 +495,13 @@ CREATE TABLE IF NOT EXISTS feishu_dws.dws_skc_product_info_d (
 ) ENGINE=OLAP
 PRIMARY KEY(`style_no`)
 COMMENT "DWS层-SKC商品维表"
-PARTITION BY RANGE(`shelf_date`) ()
 DISTRIBUTED BY HASH(`style_no`) BUCKETS 16
 PROPERTIES (
     "compression" = "LZ4",
-    "enable_persistent_index" = "true",
+    "enable_persistent_index" = "true", 
     "fast_schema_evolution" = "true",
     "replicated_storage" = "true",
-    "replication_num" = "1",
-    "dynamic_partition.enable" = "true",
-    "dynamic_partition.time_unit" = "DAY",
-    "dynamic_partition.start" = "-365",
-    "dynamic_partition.end" = "3",
-    "dynamic_partition.prefix" = "p",
-    "dynamic_partition.history_partition_num" = "365"
+    "replication_num" = "1"
 );
 ```
 
@@ -541,57 +524,64 @@ INSERT INTO feishu_dws.dws_skc_product_info_d (
     sync_time, insert_date, update_date
 )
 WITH
--- 1. SKU 级补全后的基础信息（复用 SKU 维度的补全逻辑，再聚合到 SKC）
+-- 1. brand_order_arrival_d 按 style_no 聚合（SKC维度）
+--    order_qty: SUM(order_qty)，30_est_arrival_date: MIN 取最早时间
+boa_agg_skc AS (
+    SELECT
+        boa.style_no                                       AS style_no,
+        COALESCE(SUM(boa.order_qty), 0)                    AS order_qty,
+        MIN(boa.`30_est_arrival_date`)                     AS est_arrival_date
+    FROM feishu_dwd.dwd_feishu_brand_order_arrival_d boa
+    GROUP BY boa.style_no
+),
+-- 2. SKU 级补全后的基础信息（复用 SKU 维度的补全逻辑，再聚合到 SKC）
+--    口径5.5节：SKC上架时间 = MIN(shelf_date)，shelf_date 需先按3.5节补全
+--    注意：先在 SKU 级用 MIN(30_est_arrival_date) 补全 shelf_date，再聚合到 SKC 取 MIN
 sku_base AS (
     SELECT
         p.style_no                                         AS style_no,
-        p.brand                                            AS brand,
-        COALESCE(NULLIF(TRIM(p.ip), ''), 'None')           AS ip,
-        COALESCE(NULLIF(TRIM(p.series), ''), 'None')       AS series,
-        p.color_name                                       AS color_name,
-        p.product_name                                     AS product_name,
-        p.category                                         AS category,
-        -- 口径5.5节：SKC上架时间 = MIN(shelf_date)，shelf_date 需先补全
+        MAX(p.brand)                                       AS brand,
+        -- 强制取非 None 的有效值，如果全为 None/空则结果为 NULL
+        MAX(CASE WHEN COALESCE(NULLIF(TRIM(p.ip), ''), 'None') <> 'None' 
+                 THEN p.ip ELSE NULL END)                   AS ip,
+        MAX(CASE WHEN COALESCE(NULLIF(TRIM(p.series), ''), 'None') <> 'None' 
+                 THEN p.series ELSE NULL END)               AS series,
+        MAX(CASE WHEN COALESCE(NULLIF(TRIM(p.color_name), ''), 'None') <> 'None' 
+                 THEN p.color_name ELSE NULL END)           AS color_name,
+        MAX(CASE WHEN COALESCE(NULLIF(TRIM(p.product_name), ''), 'None') <> 'None' 
+                 THEN p.product_name ELSE NULL END)         AS product_name,         
+        MAX(CASE WHEN COALESCE(NULLIF(TRIM(p.category), ''), 'None') <> 'None' 
+                 THEN p.category ELSE NULL END)             AS category,
+        -- 口径5.5节：SKC上架时间 = MIN(每个SKU补全后的shelf_date)
         MIN(COALESCE(
             NULLIF(p.shelf_date, DATE('1970-01-01')),
-            boa.`30_est_arrival_date`
+            boa.est_arrival_date
         ))                                                 AS shelf_date,
         MIN(NULLIF(p.first_sales_date, DATE('1970-01-01'))) AS first_sales_date,
         SUM(COALESCE(p.inventory_sku, 0))                  AS inventory_sku,
         SUM(COALESCE(p.replenish_qty, 0))                  AS replenish_qty,
         MAX(CASE WHEN COALESCE(p.is_replenish, '否') = '是' THEN 1 ELSE 0 END) AS has_replenish,
-        MAX(p.sync_time)                                   AS sync_time
+        MAX(p.sync_time)                                   AS sync_time,
+        -- 订货数量 Q（口径5.18节）：SKC维度 SUM(order_qty)，从 boa_agg_skc 取
+        -- 注意：同一 style_no 下所有 SKU 的 boa.order_qty 相同（来源于同一 SKC 订货单），取 MAX 避免重复累加
+        -- 若需精确按 SKU 累加，应在 SKU 级聚合后再 SUM 到 SKC
+        MAX(COALESCE(boa.order_qty, 0))                    AS order_qty
     FROM feishu_dwd.dwd_feishu_product_all_d p
-    LEFT JOIN feishu_dwd.dwd_feishu_brand_order_arrival_d boa
-        ON CONCAT_WS('-', p.style_no, p.size) = boa.style_no_size
+    LEFT JOIN boa_agg_skc boa
+        ON p.style_no = boa.style_no
     WHERE p.brand = '韦德'
-    GROUP BY p.style_no, p.brand, p.ip, p.series, p.color_name, p.product_name, p.category
+    GROUP BY p.style_no
 ),
--- 2. SKC 订货数量（口径5.18节）：SUM(order_qty) GROUP BY style_no
-order_qty_skc AS (
-    SELECT
-        boa.style_no                                       AS style_no,
-        COALESCE(SUM(boa.order_qty), 0)                    AS order_qty
-    FROM feishu_dwd.dwd_feishu_brand_order_arrival_d boa
-    GROUP BY boa.style_no
-),
--- 3. SKC 可提库存（口径5.10节）：取最新 inventory_date，按 style_no 聚合
-latest_inv_date_skc AS (
-    SELECT style_no, MAX(inventory_date) AS max_date
-    FROM feishu_dwd.dwd_feishu_inventory_wdpinpai_d
-    GROUP BY style_no
-),
+-- 3. SKC 可提库存（口径5.10节）：取最新 inventory_date，按 style_no 聚合（一步完成）
 available_inv_skc AS (
     SELECT
         inv.style_no                                       AS style_no,
-        COALESCE(SUM(inv.inventory_qty), 0)                AS available_inventory
+        COALESCE(SUM(inv.inventory_qty), 0)                AS available_inventory,
+        MAX(inv.inventory_date) AS max_date
     FROM feishu_dwd.dwd_feishu_inventory_wdpinpai_d inv
-    INNER JOIN latest_inv_date_skc lid
-        ON inv.style_no = lid.style_no
-       AND inv.inventory_date = lid.max_date
     GROUP BY inv.style_no
 ),
--- 4. SKC 销售汇总（口径5.12节 / 5.16节）：按 style_no 聚合
+-- 4. SKC 销售汇总（口径5.12节 / 5.16节）：按 style_no 聚合，核心4渠道
 sales_agg_skc AS (
     SELECT
         s.style_no                                         AS style_no,
@@ -608,21 +598,22 @@ sales_agg_skc AS (
 SELECT
     sb.style_no                                            AS style_no,
     sb.brand                                               AS brand,
-    sb.ip                                                  AS ip,
-    sb.series                                              AS series,
-    sb.color_name                                          AS color_name,
-    sb.product_name                                        AS product_name,
-    sb.category                                            AS category,
+    COALESCE(sb.ip, 'None')                                AS ip,
+    COALESCE(sb.series, 'None')                            AS series,
+    -- 兜底处理，如果 sku_base 里算出来是 NULL，则转为 'None'
+    COALESCE(sb.color_name, 'None')                        AS color_name,
+    COALESCE(sb.product_name, 'None')                      AS product_name,
+    COALESCE(sb.category, 'None')                          AS category,
     sb.shelf_date                                          AS shelf_date,
     sb.first_sales_date                                    AS first_sales_date,
     sb.inventory_sku                                       AS inventory_sku,
     COALESCE(ai.available_inventory, 0)                    AS available_inventory,
-    COALESCE(oq.order_qty, 0)                              AS order_qty,
+    sb.order_qty                                           AS order_qty,
     sb.replenish_qty                                       AS replenish_qty,
     -- 口径5.20节：SKC总订货数量
     CASE WHEN sb.has_replenish = 1
-         THEN COALESCE(oq.order_qty, 0) + sb.replenish_qty
-         ELSE COALESCE(oq.order_qty, 0)
+         THEN sb.order_qty + sb.replenish_qty
+         ELSE sb.order_qty
     END                                                    AS total_order_qty,
     -- 口径5.12节：SKC 30天平均日销
     CASE
@@ -656,7 +647,7 @@ SELECT
     END                                                    AS sellable_days,
     -- 口径5.19节：SKC达成比例
     CAST(COALESCE(sa.cum_actual, 0) AS DECIMAL(18,6))
-        / NULLIF(CAST(COALESCE(oq.order_qty, 0) AS DECIMAL(18,6)), 0) AS achievement_ratio,
+        / NULLIF(CAST(sb.order_qty AS DECIMAL(18,6)), 0) AS achievement_ratio,
     -- 口径5.7节：SKC已上架天数
     DATEDIFF(CURRENT_DATE(), sb.shelf_date) + 1           AS lifecycle_day,
     -- 口径5.8节：SKC销售周期标签
@@ -671,7 +662,6 @@ SELECT
     CURRENT_TIMESTAMP()                                    AS insert_date,
     CURRENT_TIMESTAMP()                                    AS update_date
 FROM sku_base sb
-LEFT JOIN order_qty_skc oq   ON sb.style_no = oq.style_no
 LEFT JOIN available_inv_skc ai ON sb.style_no = ai.style_no
 LEFT JOIN sales_agg_skc sa   ON sb.style_no = sa.style_no
 WHERE sb.style_no IS NOT NULL
@@ -744,7 +734,7 @@ CREATE TABLE IF NOT EXISTS feishu_dws.dws_sku_sales_plan_180d_d (
     `order_qty`            BIGINT          COMMENT "订货数量Q(空值兜底0)",
     -- 5. 销售计划（1~180天计算，超周期为NULL）
     `plan_pre`             DECIMAL(18,6)   COMMENT "销售计划(销售前)(Q*ratio/180)",
-    `plan_post`            DECIMAL(18,6)   COMMENT "销售计划(销售后)((Q-cum_actual)*ratio/(181-N))",
+    `plan_post`            DECIMAL(18,6)   COMMENT "销售计划(销售后)((Q-cum_actual)*ratio/(180-N))",
     -- 6. 实际销售
     `actual_qty`           BIGINT          COMMENT "实际销售(第N天核心4渠道SUM(qty))",
     `actual_amt`           DECIMAL(18,6)   COMMENT "实际销售金额(第N天核心4渠道SUM(amt))",
@@ -767,16 +757,10 @@ PARTITION BY RANGE(`sale_date`) ()
 DISTRIBUTED BY HASH(`style_no_size`) BUCKETS 32
 PROPERTIES (
     "compression" = "LZ4",
-    "enable_persistent_index" = "true",
+    "enable_persistent_index" = "true", 
     "fast_schema_evolution" = "true",
     "replicated_storage" = "true",
-    "replication_num" = "1",
-    "dynamic_partition.enable" = "true",
-    "dynamic_partition.time_unit" = "DAY",
-    "dynamic_partition.start" = "-730",
-    "dynamic_partition.end" = "3",
-    "dynamic_partition.prefix" = "p",
-    "dynamic_partition.history_partition_num" = "730"
+    "replication_num" = "1"
 );
 ```
 
@@ -801,7 +785,17 @@ INSERT INTO feishu_dws.dws_sku_sales_plan_180d_d (
     sync_time, insert_date, update_date
 )
 WITH
--- 1. SKU 基础信息 + shelf_date 补全（口径3.5节）
+-- 1. brand_order_arrival_d 按 style_no_size 聚合，30_est_arrival_date 取最早时间（口径3.5节）
+boa_agg AS (
+    SELECT
+        boa.style_no_size                                  AS style_no_size,
+        COALESCE(SUM(boa.order_qty), 0)                    AS order_qty,
+        MIN(boa.`30_est_arrival_date`)                     AS est_arrival_date
+    FROM feishu_dwd.dwd_feishu_brand_order_arrival_d boa
+    GROUP BY boa.style_no_size
+),
+-- 2. SKU 基础信息 + shelf_date 补全（口径3.5节）
+--    shelf_date 优先取 product_all_d.shelf_date，为空取最早的 30_est_arrival_date
 product_base AS (
     SELECT
         CONCAT_WS('-', p.style_no, p.size)                 AS style_no_size,
@@ -810,68 +804,75 @@ product_base AS (
         p.size                                             AS size,
         COALESCE(
             NULLIF(p.shelf_date, DATE('1970-01-01')),
-            boa.`30_est_arrival_date`
+            boa.est_arrival_date
         )                                                  AS shelf_date,
         COALESCE(p.inventory_sku, 0)                       AS inventory_sku,
-        p.sync_time                                        AS sync_time
+        p.sync_time                                        AS sync_time,
+        -- 订货数量 Q（口径3.18节）：按 style_no_size 关联
+        COALESCE(boa.order_qty, 0)                         AS order_qty
     FROM feishu_dwd.dwd_feishu_product_all_d p
-    LEFT JOIN feishu_dwd.dwd_feishu_brand_order_arrival_d boa
+    LEFT JOIN boa_agg boa
         ON CONCAT_WS('-', p.style_no, p.size) = boa.style_no_size
     WHERE p.brand = '韦德'
       AND CONCAT_WS('-', p.style_no, p.size) IS NOT NULL
       AND CONCAT_WS('-', p.style_no, p.size) <> 'None'
       AND COALESCE(
             NULLIF(p.shelf_date, DATE('1970-01-01')),
-            boa.`30_est_arrival_date`
+            boa.est_arrival_date
           ) IS NOT NULL
 ),
--- 2. 订货数量 Q（口径3.18节）
-order_qty_agg AS (
-    SELECT
-        boa.style_no_size                                  AS style_no_size,
-        COALESCE(SUM(boa.order_qty), 0)                    AS order_qty
-    FROM feishu_dwd.dwd_feishu_brand_order_arrival_d boa
-    GROUP BY boa.style_no_size
-),
--- 3. 可提库存（口径3.10节）
-latest_inv_date AS (
-    SELECT sku, MAX(inventory_date) AS max_date
-    FROM feishu_dwd.dwd_feishu_inventory_wdpinpai_d
-    GROUP BY sku
-),
+-- 3. 可提库存（口径3.10节）：取最新 inventory_date，按 style_no_size 聚合（一步完成）
 available_inv AS (
     SELECT
-        inv.sku                                            AS sku,
+        CONCAT_WS('-', inv.style_no, inv.size)             AS style_no_size,
         COALESCE(SUM(inv.inventory_qty), 0)                AS available_inventory
     FROM feishu_dwd.dwd_feishu_inventory_wdpinpai_d inv
-    INNER JOIN latest_inv_date lid
-        ON inv.sku = lid.sku
+    INNER JOIN (
+        SELECT CONCAT_WS('-', style_no, size) AS style_no_size,
+               MAX(inventory_date) AS max_date
+        FROM feishu_dwd.dwd_feishu_inventory_wdpinpai_d
+        GROUP BY CONCAT_WS('-', style_no, size)
+    ) lid ON CONCAT_WS('-', inv.style_no, inv.size) = lid.style_no_size
        AND inv.inventory_date = lid.max_date
-    GROUP BY inv.sku
+    GROUP BY CONCAT_WS('-', inv.style_no, inv.size)
 ),
--- 4. 销售明细按 sku + sales_date 聚合（核心4渠道）
+-- 4. 销售明细按 style_no_size + sales_date 聚合（核心4渠道）
 sales_daily AS (
     SELECT
-        s.sku                                              AS sku,
+        CONCAT_WS('-', s.style_no, s.size)                 AS style_no_size,
         s.sales_date                                       AS sales_date,
         COALESCE(SUM(s.qty), 0)                            AS daily_qty,
         COALESCE(SUM(s.amt), 0)                            AS daily_amt
     FROM feishu_dwd.dwd_feishu_sales_all_d s
     WHERE s.brand = '韦德'
       AND s.channel_code IN ('wd', 'japan', 'spanish', 'germany')
-    GROUP BY s.sku, s.sales_date
+    GROUP BY CONCAT_WS('-', s.style_no, s.size), s.sales_date
 ),
--- 5. 30天平均日销辅助（口径3.12节）
+-- 5. 30天平均日销辅助（口径3.12节），按 style_no_size 聚合
 sales_30d AS (
     SELECT
-        s.sku                                              AS sku,
+        CONCAT_WS('-', s.style_no, s.size)                 AS style_no_size,
         COALESCE(SUM(CASE WHEN s.sales_date >= DATE_SUB(CURRENT_DATE(), 30)
                           AND s.sales_date < CURRENT_DATE() THEN s.qty ELSE 0 END), 0) AS last_30d_qty,
         COALESCE(SUM(CASE WHEN s.sales_date < CURRENT_DATE() THEN s.qty ELSE 0 END), 0) AS cum_actual_total
     FROM feishu_dwd.dwd_feishu_sales_all_d s
     WHERE s.brand = '韦德'
       AND s.channel_code IN ('wd', 'japan', 'spanish', 'germany')
-    GROUP BY s.sku
+    GROUP BY CONCAT_WS('-', s.style_no, s.size)
+),
+-- 6. 累计实际销量（截至 N-1 天，口径4.4节），按 style_no_size 聚合
+--    使用窗口函数：SUM(qty) OVER (PARTITION BY style_no_size ORDER BY sales_date ROWS UNBOUNDED ~ 1 PRECEDING)
+sales_cum AS (
+    SELECT
+        CONCAT_WS('-', s.style_no, s.size)                 AS style_no_size,
+        s.sales_date                                       AS sales_date,
+        SUM(s.qty) OVER (PARTITION BY CONCAT_WS('-', s.style_no, s.size) ORDER BY s.sales_date
+                         ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS cum_before,
+        SUM(s.amt) OVER (PARTITION BY CONCAT_WS('-', s.style_no, s.size) ORDER BY s.sales_date
+                         ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS cum_before_amt
+    FROM feishu_dwd.dwd_feishu_sales_all_d s
+    WHERE s.brand = '韦德'
+      AND s.channel_code IN ('wd', 'japan', 'spanish', 'germany')
 ),
 -- 6. 全局最晚 shelf_date（用于确定补齐结束日 = 最晚shelf_date + 180天）
 global_max_shelf AS (
@@ -887,6 +888,7 @@ sku_calendar AS (
         pb.size                                            AS size,
         pb.shelf_date                                      AS shelf_date,
         pb.inventory_sku                                   AS inventory_sku,
+        pb.order_qty                                       AS order_qty,
         pb.sync_time                                       AS sync_time,
         -- 全局最晚 shelf_date + 180天
         DATE_ADD(gms.max_shelf_date, INTERVAL 180 DAY)     AS end_date,
@@ -938,10 +940,10 @@ SELECT
     sc.style_no                                            AS style_no,
     sc.size                                                AS size,
     sc.shelf_date                                          AS shelf_date,
-    COALESCE(oq.order_qty, 0)                              AS order_qty,
+    sc.order_qty                                           AS order_qty,
     -- 口径4.3节：plan_pre = Q * ratio / 180 （超周期为NULL）
     CASE WHEN sc.lifecycle_day BETWEEN 1 AND 180
-         THEN CAST(COALESCE(oq.order_qty, 0) AS DECIMAL(18,6))
+         THEN CAST(sc.order_qty AS DECIMAL(18,6))
               * CASE
                   WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
                   WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
@@ -954,8 +956,8 @@ SELECT
     --    分母 = 180 - sold_days = 180 - (N-1) = 181 - N
     --    超周期为NULL
     CASE WHEN sc.lifecycle_day BETWEEN 1 AND 180
-         THEN (CAST(COALESCE(oq.order_qty, 0) AS DECIMAL(18,6))
-               - CAST(COALESCE(sd_cum.cum_before, 0) AS DECIMAL(18,6)))
+         THEN (CAST(sc.order_qty AS DECIMAL(18,6))
+               - CAST(COALESCE(sdc.cum_before, 0) AS DECIMAL(18,6)))
               * CASE
                   WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
                   WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
@@ -968,14 +970,14 @@ SELECT
     COALESCE(sd.daily_qty, 0)                              AS actual_qty,
     COALESCE(sd.daily_amt, 0)                              AS actual_amt,
     -- 累计实际销量 = 截至N-1天的 SUM(qty)（即 lifecycle_day < N）
-    COALESCE(sd_cum.cum_before, 0)                         AS cum_actual,
-    COALESCE(sd_cum.cum_before_amt, 0)                     AS cum_actual_amt,
+    COALESCE(sdc.cum_before, 0)                            AS cum_actual,
+    COALESCE(sdc.cum_before_amt, 0)                        AS cum_actual_amt,
     -- 口径4.6节：达成情况 = actual_qty / plan_post
     CASE WHEN sc.lifecycle_day BETWEEN 1 AND 180
          THEN CAST(COALESCE(sd.daily_qty, 0) AS DECIMAL(18,6))
               / NULLIF(
-                  (CAST(COALESCE(oq.order_qty, 0) AS DECIMAL(18,6))
-                   - CAST(COALESCE(sd_cum.cum_before, 0) AS DECIMAL(18,6)))
+                  (CAST(sc.order_qty AS DECIMAL(18,6))
+                   - CAST(COALESCE(sdc.cum_before, 0) AS DECIMAL(18,6)))
                   * CASE
                       WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
                       WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
@@ -1003,25 +1005,11 @@ SELECT
     CURRENT_TIMESTAMP()                                    AS insert_date,
     CURRENT_TIMESTAMP()                                    AS update_date
 FROM sku_calendar sc
-LEFT JOIN order_qty_agg oq   ON sc.style_no_size = oq.style_no_size
-LEFT JOIN available_inv ai   ON sc.style_no = ai.sku
-LEFT JOIN sales_daily sd     ON sc.style_no = sd.sku AND sc.sale_date = sd.sales_date
-LEFT JOIN sales_30d s30      ON sc.style_no = s30.sku
--- 累计销量：截至 N-1 天（即 lifecycle_day < N 的所有销量）
--- 通过子查询关联，关联键：sku + sale_date < 当前 sale_date
-LEFT JOIN (
-    SELECT
-        s.sku                                              AS sku,
-        s.sales_date                                       AS sales_date,
-        SUM(s.qty) OVER (PARTITION BY s.sku ORDER BY s.sales_date
-                         ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS cum_before,
-        SUM(s.amt) OVER (PARTITION BY s.sku ORDER BY s.sales_date
-                         ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS cum_before_amt
-    FROM feishu_dwd.dwd_feishu_sales_all_d s
-    WHERE s.brand = '韦德'
-      AND s.channel_code IN ('wd', 'japan', 'spanish', 'germany')
-    GROUP BY s.sku, s.sales_date
-) sd_cum ON sc.style_no = sd_cum.sku AND sc.sale_date = sd_cum.sales_date
+LEFT JOIN available_inv ai   ON sc.style_no_size = ai.style_no_size
+LEFT JOIN sales_daily sd     ON sc.style_no_size = sd.style_no_size AND sc.sale_date = sd.sales_date
+LEFT JOIN sales_30d s30      ON sc.style_no_size = s30.style_no_size
+-- 累计销量：截至 N-1 天（即 lifecycle_day < N 的所有销量），关联键：style_no_size + sale_date
+LEFT JOIN sales_cum sdc      ON sc.style_no_size = sdc.style_no_size AND sc.sale_date = sdc.sales_date
 ORDER BY sc.style_no_size, sc.sale_date;
 ```
 
@@ -1157,16 +1145,10 @@ PARTITION BY RANGE(`sale_date`) ()
 DISTRIBUTED BY HASH(`style_no`) BUCKETS 32
 PROPERTIES (
     "compression" = "LZ4",
-    "enable_persistent_index" = "true",
+    "enable_persistent_index" = "true", 
     "fast_schema_evolution" = "true",
     "replicated_storage" = "true",
-    "replication_num" = "1",
-    "dynamic_partition.enable" = "true",
-    "dynamic_partition.time_unit" = "DAY",
-    "dynamic_partition.start" = "-730",
-    "dynamic_partition.end" = "3",
-    "dynamic_partition.prefix" = "p",
-    "dynamic_partition.history_partition_num" = "730"
+    "replication_num" = "1"
 );
 ```
 
@@ -1190,44 +1172,46 @@ INSERT INTO feishu_dws.dws_skc_sales_plan_180d_d (
     sync_time, insert_date, update_date
 )
 WITH
--- 1. SKC 基础信息：shelf_date = MIN(shelf_date)（口径5.5节）
+-- 1. brand_order_arrival_d 按 style_no 聚合（SKC维度），30_est_arrival_date 取最早时间
+boa_agg_skc AS (
+    SELECT
+        boa.style_no                                       AS style_no,
+        COALESCE(SUM(boa.order_qty), 0)                    AS order_qty,
+        MIN(boa.`30_est_arrival_date`)                     AS est_arrival_date
+    FROM feishu_dwd.dwd_feishu_brand_order_arrival_d boa
+    GROUP BY boa.style_no
+),
+-- 2. SKC 基础信息：shelf_date = MIN(每个SKU补全后的shelf_date)（口径5.5节）
+--    注意：先在 SKU 级用 MIN(30_est_arrival_date) 补全 shelf_date，再聚合到 SKC 取 MIN
 skc_base AS (
     SELECT
         p.style_no                                         AS style_no,
         p.brand                                            AS brand,
         MIN(COALESCE(
             NULLIF(p.shelf_date, DATE('1970-01-01')),
-            boa.`30_est_arrival_date`
+            boa.est_arrival_date
         ))                                                 AS shelf_date,
         SUM(COALESCE(p.inventory_sku, 0))                  AS inventory_sku,
-        MAX(p.sync_time)                                   AS sync_time
+        MAX(p.sync_time)                                   AS sync_time,
+        -- 订货数量 Q（口径5.18节）：SKC维度，取 MAX 避免重复累加
+        MAX(COALESCE(boa.order_qty, 0))                    AS order_qty
     FROM feishu_dwd.dwd_feishu_product_all_d p
-    LEFT JOIN feishu_dwd.dwd_feishu_brand_order_arrival_d boa
-        ON CONCAT_WS('-', p.style_no, p.size) = boa.style_no_size
+    LEFT JOIN boa_agg_skc boa
+        ON p.style_no = boa.style_no
     WHERE p.brand = '韦德'
     GROUP BY p.style_no, p.brand
 ),
--- 2. SKC 订货数量 Q（口径5.18节）
-order_qty_skc AS (
-    SELECT
-        boa.style_no                                       AS style_no,
-        COALESCE(SUM(boa.order_qty), 0)                    AS order_qty
-    FROM feishu_dwd.dwd_feishu_brand_order_arrival_d boa
-    GROUP BY boa.style_no
-),
--- 3. SKC 可提库存（口径5.10节）
-latest_inv_date_skc AS (
-    SELECT style_no, MAX(inventory_date) AS max_date
-    FROM feishu_dwd.dwd_feishu_inventory_wdpinpai_d
-    GROUP BY style_no
-),
+-- 3. SKC 可提库存（口径5.10节）：取最新 inventory_date，按 style_no 聚合（一步完成）
 available_inv_skc AS (
     SELECT
         inv.style_no                                       AS style_no,
         COALESCE(SUM(inv.inventory_qty), 0)                AS available_inventory
     FROM feishu_dwd.dwd_feishu_inventory_wdpinpai_d inv
-    INNER JOIN latest_inv_date_skc lid
-        ON inv.style_no = lid.style_no
+    INNER JOIN (
+        SELECT style_no, MAX(inventory_date) AS max_date
+        FROM feishu_dwd.dwd_feishu_inventory_wdpinpai_d
+        GROUP BY style_no
+    ) lid ON inv.style_no = lid.style_no
        AND inv.inventory_date = lid.max_date
     GROUP BY inv.style_no
 ),
@@ -1243,7 +1227,7 @@ sales_daily_skc AS (
       AND s.channel_code IN ('wd', 'japan', 'spanish', 'germany')
     GROUP BY s.style_no, s.sales_date
 ),
--- 5. SKC 30天平均日销辅助
+-- 5. SKC 30天平均日销辅助，按 style_no 聚合
 sales_30d_skc AS (
     SELECT
         s.style_no                                         AS style_no,
@@ -1255,17 +1239,31 @@ sales_30d_skc AS (
       AND s.channel_code IN ('wd', 'japan', 'spanish', 'germany')
     GROUP BY s.style_no
 ),
--- 6. 全局最晚 shelf_date
+-- 6. SKC 累计实际销量（截至 N-1 天，口径6.4节），按 style_no 聚合
+sales_cum_skc AS (
+    SELECT
+        s.style_no                                         AS style_no,
+        s.sales_date                                       AS sales_date,
+        SUM(s.qty) OVER (PARTITION BY s.style_no ORDER BY s.sales_date
+                         ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS cum_before,
+        SUM(s.amt) OVER (PARTITION BY s.style_no ORDER BY s.sales_date
+                         ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS cum_before_amt
+    FROM feishu_dwd.dwd_feishu_sales_all_d s
+    WHERE s.brand = '韦德'
+      AND s.channel_code IN ('wd', 'japan', 'spanish', 'germany')
+),
+-- 7. 全局最晚 shelf_date
 global_max_shelf_skc AS (
     SELECT MAX(shelf_date) AS max_shelf_date FROM skc_base
 ),
--- 7. 日期补齐：每个 SKC 从 MIN(shelf_date) 到 全局最晚shelf_date+180天
+-- 8. 日期补齐：每个 SKC 从 MIN(shelf_date) 到 全局最晚shelf_date+180天
 skc_calendar AS (
     SELECT
         sb.style_no                                        AS style_no,
         sb.brand                                           AS brand,
         sb.shelf_date                                      AS shelf_date,
         sb.inventory_sku                                   AS inventory_sku,
+        sb.order_qty                                       AS order_qty,
         sb.sync_time                                       AS sync_time,
         gms.max_shelf_date                                 AS max_shelf_date,
         DATEDIFF(gs.dt, sb.shelf_date) + 1                 AS lifecycle_day,
@@ -1305,10 +1303,10 @@ SELECT
     END                                                    AS ratio,
     sc.brand                                               AS brand,
     sc.shelf_date                                          AS shelf_date,
-    COALESCE(oq.order_qty, 0)                              AS order_qty,
+    sc.order_qty                                           AS order_qty,
     -- 口径6.3节：plan_pre
     CASE WHEN sc.lifecycle_day BETWEEN 1 AND 180
-         THEN CAST(COALESCE(oq.order_qty, 0) AS DECIMAL(18,6))
+         THEN CAST(sc.order_qty AS DECIMAL(18,6))
               * CASE
                   WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
                   WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
@@ -1318,8 +1316,8 @@ SELECT
     END                                                    AS plan_pre,
     -- 口径6.4节：plan_post = (Q - cum_actual) * ratio / (181 - N)
     CASE WHEN sc.lifecycle_day BETWEEN 1 AND 180
-         THEN (CAST(COALESCE(oq.order_qty, 0) AS DECIMAL(18,6))
-               - CAST(COALESCE(sd_cum.cum_before, 0) AS DECIMAL(18,6)))
+         THEN (CAST(sc.order_qty AS DECIMAL(18,6))
+               - CAST(COALESCE(sdc.cum_before, 0) AS DECIMAL(18,6)))
               * CASE
                   WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
                   WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
@@ -1330,14 +1328,14 @@ SELECT
     END                                                    AS plan_post,
     COALESCE(sd.daily_qty, 0)                              AS actual_qty,
     COALESCE(sd.daily_amt, 0)                              AS actual_amt,
-    COALESCE(sd_cum.cum_before, 0)                         AS cum_actual,
-    COALESCE(sd_cum.cum_before_amt, 0)                     AS cum_actual_amt,
+    COALESCE(sdc.cum_before, 0)                            AS cum_actual,
+    COALESCE(sdc.cum_before_amt, 0)                        AS cum_actual_amt,
     -- 口径6.6节：达成情况
     CASE WHEN sc.lifecycle_day BETWEEN 1 AND 180
          THEN CAST(COALESCE(sd.daily_qty, 0) AS DECIMAL(18,6))
               / NULLIF(
-                  (CAST(COALESCE(oq.order_qty, 0) AS DECIMAL(18,6))
-                   - CAST(COALESCE(sd_cum.cum_before, 0) AS DECIMAL(18,6)))
+                  (CAST(sc.order_qty AS DECIMAL(18,6))
+                   - CAST(COALESCE(sdc.cum_before, 0) AS DECIMAL(18,6)))
                   * CASE
                       WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
                       WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
@@ -1364,23 +1362,11 @@ SELECT
     CURRENT_TIMESTAMP()                                    AS insert_date,
     CURRENT_TIMESTAMP()                                    AS update_date
 FROM skc_calendar sc
-LEFT JOIN order_qty_skc oq     ON sc.style_no = oq.style_no
 LEFT JOIN available_inv_skc ai ON sc.style_no = ai.style_no
 LEFT JOIN sales_daily_skc sd   ON sc.style_no = sd.style_no AND sc.sale_date = sd.sales_date
 LEFT JOIN sales_30d_skc s30    ON sc.style_no = s30.style_no
-LEFT JOIN (
-    SELECT
-        s.style_no                                         AS style_no,
-        s.sales_date                                       AS sales_date,
-        SUM(s.qty) OVER (PARTITION BY s.style_no ORDER BY s.sales_date
-                         ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS cum_before,
-        SUM(s.amt) OVER (PARTITION BY s.style_no ORDER BY s.sales_date
-                         ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS cum_before_amt
-    FROM feishu_dwd.dwd_feishu_sales_all_d s
-    WHERE s.brand = '韦德'
-      AND s.channel_code IN ('wd', 'japan', 'spanish', 'germany')
-    GROUP BY s.style_no, s.sales_date
-) sd_cum ON sc.style_no = sd_cum.style_no AND sc.sale_date = sd_cum.sales_date
+-- 累计销量：截至 N-1 天，关联键：style_no + sale_date
+LEFT JOIN sales_cum_skc sdc    ON sc.style_no = sdc.style_no AND sc.sale_date = sdc.sales_date
 ORDER BY sc.style_no, sc.sale_date;
 ```
 
@@ -1499,7 +1485,7 @@ SELECT
             THEN 'style_no_size为空或None'
         WHEN COALESCE(
                 NULLIF(p.shelf_date, DATE('1970-01-01')),
-                boa.`30_est_arrival_date`
+                boa.est_arrival_date
              ) IS NULL
             THEN 'shelf_date为空且无30_est_arrival_date可补全'
         ELSE '未知异常'
@@ -1508,7 +1494,14 @@ SELECT
     CURRENT_TIMESTAMP()                                    AS insert_date,
     CURRENT_TIMESTAMP()                                    AS update_date
 FROM feishu_dwd.dwd_feishu_product_all_d p
-LEFT JOIN feishu_dwd.dwd_feishu_brand_order_arrival_d boa
+-- 先按 style_no_size 聚合，30_est_arrival_date 取最早时间，避免一对多导致数据膨胀
+LEFT JOIN (
+    SELECT
+        boa.style_no_size                                  AS style_no_size,
+        MIN(boa.`30_est_arrival_date`)                     AS est_arrival_date
+    FROM feishu_dwd.dwd_feishu_brand_order_arrival_d boa
+    GROUP BY boa.style_no_size
+) boa
     ON CONCAT_WS('-', p.style_no, p.size) = boa.style_no_size
 WHERE p.brand = '韦德'
   AND (
@@ -1518,7 +1511,7 @@ WHERE p.brand = '韦德'
       -- 条件2：补全后的 shelf_date 为空
       OR COALESCE(
             NULLIF(p.shelf_date, DATE('1970-01-01')),
-            boa.`30_est_arrival_date`
+            boa.est_arrival_date
          ) IS NULL
   );
 ```
@@ -1632,13 +1625,20 @@ FROM (
         MIN(NULLIF(p.shelf_date, DATE('1970-01-01')))     AS min_shelf_raw,
         MIN(COALESCE(
             NULLIF(p.shelf_date, DATE('1970-01-01')),
-            boa.`30_est_arrival_date`
+            boa.est_arrival_date
         ))                                                 AS min_shelf_full,
         MIN(NULLIF(p.first_sales_date, DATE('1970-01-01'))) AS min_first_sales,
         MAX(p.sync_time)                                   AS max_sync_time
     FROM feishu_dwd.dwd_feishu_product_all_d p
-    LEFT JOIN feishu_dwd.dwd_feishu_brand_order_arrival_d boa
-        ON CONCAT_WS('-', p.style_no, p.size) = boa.style_no_size
+    -- 先按 style_no 聚合，30_est_arrival_date 取最早时间，避免一对多导致数据膨胀
+    LEFT JOIN (
+        SELECT
+            boa.style_no                                   AS style_no,
+            MIN(boa.`30_est_arrival_date`)                 AS est_arrival_date
+        FROM feishu_dwd.dwd_feishu_brand_order_arrival_d boa
+        GROUP BY boa.style_no
+    ) boa
+        ON p.style_no = boa.style_no
     WHERE p.brand = '韦德'
     GROUP BY p.style_no
 ) skc
