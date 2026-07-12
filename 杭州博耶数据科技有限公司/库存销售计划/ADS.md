@@ -13,8 +13,8 @@
 
 1. **面向 BI 展示优化**：字段命名业务化，便于 QuickBI 直接拖拽展示
 2. **口径唯一来源**：所有字段计算逻辑以 `基于DWD层的字段口径定义.md` 为准
-3. **StarRocks 规范**：COMMENT 用双引号 `"`、英文括号 `()`、`replication_num="1"`、`compression="LZ4"`、`fast_schema_evolution="true"`
-4. **Key 列前 N 列**：DUPLICATE KEY ≤3 列，Key 列与表结构顺序一致
+3. **StarRocks 规范**：COMMENT 用双引号 `"`、英文括号 `()`、`replication_num="1"`、`compression="LZ4"`、`fast_schema_evolution="true"`、`enable_persistent_index="true"`
+4. **Key 列前 N 列**：PRIMARY KEY ≤3 列，Key 列与表结构顺序一致
 5. **空值兜底**：数值 `COALESCE(..., 0)`，字符串 `COALESCE(NULLIF(TRIM(...), ''), 'None')`
 6. **防除零**：使用 `NULLIF(..., 0)`
 7. **显式列名与别名**：INSERT INTO 显式列出目标列，SELECT 每个字段加 `AS alias`
@@ -83,9 +83,9 @@
 
 | 表名 | 中文名 | 粒度 | 来源 | 模型 | 刷新 | 用途 |
 |------|--------|------|------|------|------|------|
-| `feishu_ads.ads_sku_sales_plan_180d_d` | SKU维度1~180天销售计划表 | style_no_size + sale_date | dws_sku_sales_plan_180d_d + dws_sku_product_info_d | DUPLICATE KEY | 日刷新 | QuickBI展示SKU维度逐日销售计划 |
-| `feishu_ads.ads_skc_sales_plan_180d_d` | SKC维度1~180天销售计划表 | style_no + sale_date | dws_skc_sales_plan_180d_d + dws_skc_product_info_d | DUPLICATE KEY | 日刷新 | QuickBI展示SKC维度逐日销售计划 |
-| `feishu_ads.ads_sku_skc_summary_d` | SKU/SKC汇总表 | dim_type + dim_value | dws_sku_product_info_d + dws_skc_product_info_d + dws_sku/skc_sales_plan_180d_d | DUPLICATE KEY | 日刷新 | QuickBI展示SKU/SKC汇总信息 |
+| `feishu_ads.ads_sku_sales_plan_180d_d` | SKU维度1~180天销售计划表 | style_no_size + sale_date | dws_sku_sales_plan_180d_d + dws_sku_product_info_d | PRIMARY KEY | 日刷新 | QuickBI展示SKU维度逐日销售计划 |
+| `feishu_ads.ads_skc_sales_plan_180d_d` | SKC维度1~180天销售计划表 | style_no + sale_date | dws_skc_sales_plan_180d_d + dws_skc_product_info_d | PRIMARY KEY | 日刷新 | QuickBI展示SKC维度逐日销售计划 |
+| `feishu_ads.ads_sku_skc_summary_d` | SKU/SKC汇总表 | dim_type + dim_value | dws_sku_product_info_d + dws_skc_product_info_d + dws_sku/skc_sales_plan_180d_d | PRIMARY KEY | 日刷新 | QuickBI展示SKU/SKC汇总信息 |
 
 ---
 
@@ -171,66 +171,66 @@ COALESCE(sp.cum_actual_amt, 0) + COALESCE(sp.actual_amt, 0) AS cum_amt
 DROP TABLE IF EXISTS feishu_ads.ads_sku_sales_plan_180d_d;
 
 CREATE TABLE IF NOT EXISTS feishu_ads.ads_sku_sales_plan_180d_d (
-    -- 1. Key 列（前 N 列，顺序与 DUPLICATE KEY 一致，≤3列）
-    `style_no_size`            VARCHAR(255)    COMMENT "SKU编码(style_no-size拼接,口径3.1节)",
-    `sale_date`                DATE            COMMENT "销售日期(口径4.1节,分区键)",
+    -- 1. Key 列（前 N 列，顺序与 PRIMARY KEY 一致，≤3列）
+    `style_no_size`            VARCHAR(255)    COMMENT "SKU编码(style_no-size拼接)",
+    `sale_date`                DATE            COMMENT "销售日期(分区键)",
     -- 2. 日期与生命周期定位
-    `lifecycle_day`            BIGINT          COMMENT "上市第N天(口径4.1节,DATEDIFF(sale_date,shelf_date)+1)",
-    `sale_date_label`          VARCHAR(20)     COMMENT "销售日期标签(第N天/超周期,口径4.1节)",
-    `sales_phase`              VARCHAR(50)     COMMENT "销售阶段(新品期/热销期/清货期/超周期,口径4.2节)",
+    `lifecycle_day`            BIGINT          COMMENT "上市第N天(DATEDIFF(sale_date,shelf_date)+1)",
+    `sale_date_label`          VARCHAR(20)     COMMENT "销售日期标签(第N天/超周期)",
+    `sales_phase`              VARCHAR(50)     COMMENT "销售阶段(新品期/热销期/清货期/超周期)",
     `is_over_cycle`            TINYINT         COMMENT "是否超周期(1=超周期,0=正常周期)",
     -- 3. 维度属性
-    `brand`                    VARCHAR(20)     COMMENT "品牌(口径3.2节)",
-    `style_no`                 VARCHAR(128)    COMMENT "款号/SKC编码(口径3.1节)",
+    `brand`                    VARCHAR(20)     COMMENT "品牌",
+    `style_no`                 VARCHAR(128)    COMMENT "款号/SKC编码",
     `size`                     VARCHAR(50)     COMMENT "尺码",
-    `ip`                       VARCHAR(100)    COMMENT "IP(口径3.4节,空值兜底None)",
-    `series`                   VARCHAR(100)    COMMENT "系列(口径3.3节,空值兜底None)",
+    `ip`                       VARCHAR(100)    COMMENT "IP(空值兜底None)",
+    `series`                   VARCHAR(100)    COMMENT "系列(空值兜底None)",
     `color_name`               VARCHAR(100)    COMMENT "配色名",
     `product_name`             VARCHAR(500)    COMMENT "商品名称",
     `category`                 VARCHAR(100)    COMMENT "品类",
     `tag_price`                DECIMAL(18,6)   COMMENT "吊牌价(元)",
-    `shelf_date`               DATE            COMMENT "上架日期(口径3.5节)",
-    `first_sales_date`         DATE            COMMENT "首次销售日期(口径3.6节)",
+    `shelf_date`               DATE            COMMENT "上架日期",
+    `first_sales_date`         DATE            COMMENT "首次销售日期",
     -- 4. 销售计划(1~180天计算,超周期为NULL)
-    `plan_pre`                 DECIMAL(18,6)   COMMENT "销售计划(销售前)(口径4.3节,Q*ratio/180)",
-    `plan_post`                DECIMAL(18,6)   COMMENT "销售计划(销售后)(口径4.4节,(Q-cum_actual)*ratio/(181-N))",
+    `plan_pre`                 DECIMAL(18,6)   COMMENT "销售计划(销售前)(Q*ratio/180)",
+    `plan_post`                DECIMAL(18,6)   COMMENT "销售计划(销售后)((Q-cum_actual)*ratio/(181-N))",
     -- 5. 实际销售与累计
-    `daily_qty`                BIGINT          COMMENT "日销量(口径3.14/4.5节,第N天核心4渠道SUM(qty))",
-    `daily_amt`                DECIMAL(18,6)   COMMENT "日金额(口径3.15节,第N天核心4渠道SUM(amt))",
-    `cum_qty`                  BIGINT          COMMENT "累计销量(口径3.16节,截至当天N的累计)",
-    `cum_amt`                  DECIMAL(18,6)   COMMENT "累计金额(口径3.17节,截至当天N的累计)",
+    `daily_qty`                BIGINT          COMMENT "日销量(第N天核心4渠道SUM(qty))",
+    `daily_amt`                DECIMAL(18,6)   COMMENT "日金额(第N天核心4渠道SUM(amt))",
+    `cum_qty`                  BIGINT          COMMENT "累计销量(截至当天N的累计)",
+    `cum_amt`                  DECIMAL(18,6)   COMMENT "累计金额(截至当天N的累计)",
     -- 6. 达成情况
-    `achievement_rate`         DECIMAL(18,6)   COMMENT "达成情况(口径4.6节,daily_qty/plan_post,plan_post=0时NULL)",
+    `achievement_rate`         DECIMAL(18,6)   COMMENT "达成情况(daily_qty/plan_post,plan_post=0时NULL)",
     -- 7. 库存指标
-    `inventory_sku`            BIGINT          COMMENT "在仓库存(口径3.9节,空值兜底0)",
-    `available_inventory`      BIGINT          COMMENT "可提库存(口径3.10节,取最新inventory_date按sku聚合)",
-    `daily_avg_qty_30d`        DECIMAL(18,6)   COMMENT "30天平均日销(口径3.12节,核心4渠道)",
-    `sellable_days`            DECIMAL(18,6)   COMMENT "可售周期天数(口径3.11节,在仓库存/30天平均日销)",
+    `inventory_sku`            BIGINT          COMMENT "在仓库存(空值兜底0)",
+    `available_inventory`      BIGINT          COMMENT "可提库存(取最新inventory_date按sku聚合)",
+    `daily_avg_qty_30d`        DECIMAL(18,6)   COMMENT "30天平均日销(核心4渠道)",
+    `sellable_days`            DECIMAL(18,6)   COMMENT "可售周期天数(在仓库存/30天平均日销)",
     -- 8. 当前快照指标(昨日/今日/7天/30天达成,同一SKU所有行值相同)
-    `yesterday_actual_qty`     BIGINT          COMMENT "昨日实际销售(口径3.21节,昨日核心4渠道SUM(qty))",
-    `yesterday_achievement`    DECIMAL(18,6)   COMMENT "昨日销售达成情况(口径3.22节,昨日实际/昨日计划(后))",
-    `7d_achievement`           DECIMAL(18,6)   COMMENT "7天销售达成情况(口径3.23节,近7天实际/近7天计划(后))",
-    `30d_achievement`          DECIMAL(18,6)   COMMENT "30天销售达成情况(口径3.24节,近30天实际/近30天计划(后))",
-    `today_plan_qty`           DECIMAL(18,6)   COMMENT "今日计划销售数量(口径3.25节,今天的销售计划(后),超周期为0)",
+    `yesterday_actual_qty`     BIGINT          COMMENT "昨日实际销售(昨日核心4渠道SUM(qty))",
+    `yesterday_achievement`    DECIMAL(18,6)   COMMENT "昨日销售达成情况(昨日实际/昨日计划(后))",
+    `7d_achievement`           DECIMAL(18,6)   COMMENT "7天销售达成情况(近7天实际/近7天计划(后))",
+    `30d_achievement`          DECIMAL(18,6)   COMMENT "30天销售达成情况(近30天实际/近30天计划(后))",
+    `today_plan_qty`           DECIMAL(18,6)   COMMENT "今日计划销售数量(今天的销售计划(后),超周期为0)",
     -- 9. 订货指标
-    `order_qty`                BIGINT          COMMENT "订货数量Q(口径3.18节,空值兜底0)",
-    `total_order_qty`          BIGINT          COMMENT "总订货数量(口径3.20节,订货+补货)",
-    `achievement_ratio`        DECIMAL(18,6)   COMMENT "达成比例(口径3.19节,累计销量/订货数量)",
+    `order_qty`                BIGINT          COMMENT "订货数量Q(空值兜底0)",
+    `total_order_qty`          BIGINT          COMMENT "总订货数量(订货+补货)",
+    `achievement_ratio`        DECIMAL(18,6)   COMMENT "达成比例(累计销量/订货数量)",
     -- 10. 技术字段
     `sync_time`                DATETIME        COMMENT "ODS同步时间",
     `insert_date`              DATETIME        COMMENT "ADS记录插入时间(ETL写入)",
     `update_date`              DATETIME        COMMENT "ADS记录更新时间(ETL写入)"
 ) ENGINE=OLAP
-DUPLICATE KEY(`style_no_size`, `sale_date`)
+PRIMARY KEY(`style_no_size`, `sale_date`)
 COMMENT "ADS层-SKU维度1~180天销售计划表(日刷新,韦德4核心渠道,核心表,QuickBI直接消费)"
 PARTITION BY RANGE(`sale_date`) ()
 DISTRIBUTED BY HASH(`style_no_size`) BUCKETS 32
 PROPERTIES (
-    "replication_num" = "1",
     "compression" = "LZ4",
-    "in_memory" = "false",
-    "storage_format" = "DEFAULT",
+    "enable_persistent_index" = "true",
     "fast_schema_evolution" = "true",
+    "replicated_storage" = "true",
+    "replication_num" = "1",
     "dynamic_partition.enable" = "true",
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-730",
@@ -484,62 +484,62 @@ DROP TABLE IF EXISTS feishu_ads.ads_skc_sales_plan_180d_d;
 
 CREATE TABLE IF NOT EXISTS feishu_ads.ads_skc_sales_plan_180d_d (
     -- 1. Key 列（前 N 列，≤3列）
-    `style_no`                 VARCHAR(128)    COMMENT "SKC编码/款号(口径5.1节)",
-    `sale_date`                DATE            COMMENT "销售日期(口径6.1节,分区键)",
+    `style_no`                 VARCHAR(128)    COMMENT "SKC编码/款号",
+    `sale_date`                DATE            COMMENT "销售日期(分区键)",
     -- 2. 日期与生命周期定位
-    `lifecycle_day`            BIGINT          COMMENT "上市第N天(口径6.1节,DATEDIFF(sale_date,MIN(shelf_date))+1)",
-    `sale_date_label`          VARCHAR(20)     COMMENT "销售日期标签(第N天/超周期,口径6.1节)",
-    `sales_phase`              VARCHAR(50)     COMMENT "销售阶段(新品期/热销期/清货期/超周期,口径6.2节)",
+    `lifecycle_day`            BIGINT          COMMENT "上市第N天(DATEDIFF(sale_date,MIN(shelf_date))+1)",
+    `sale_date_label`          VARCHAR(20)     COMMENT "销售日期标签(第N天/超周期)",
+    `sales_phase`              VARCHAR(50)     COMMENT "销售阶段(新品期/热销期/清货期/超周期)",
     `is_over_cycle`            TINYINT         COMMENT "是否超周期(1=超周期,0=正常周期)",
     -- 3. 维度属性
-    `brand`                    VARCHAR(20)     COMMENT "品牌(口径5.2节)",
-    `ip`                       VARCHAR(100)    COMMENT "IP(口径5.4节,空值兜底None)",
-    `series`                   VARCHAR(100)    COMMENT "系列(口径5.3节,空值兜底None)",
+    `brand`                    VARCHAR(20)     COMMENT "品牌",
+    `ip`                       VARCHAR(100)    COMMENT "IP(空值兜底None)",
+    `series`                   VARCHAR(100)    COMMENT "系列(空值兜底None)",
     `product_name`             VARCHAR(500)    COMMENT "商品名称(取代表值)",
     `category`                 VARCHAR(100)    COMMENT "品类(取代表值)",
     `tag_price`                DECIMAL(18,6)   COMMENT "吊牌价(元)",
-    `shelf_date`               DATE            COMMENT "SKC上架日期(口径5.5节,MIN(shelf_date))",
-    `first_sales_date`         DATE            COMMENT "SKC首次销售日期(口径5.6节,MIN(first_sales_date))",
+    `shelf_date`               DATE            COMMENT "SKC上架日期(MIN(shelf_date))",
+    `first_sales_date`         DATE            COMMENT "SKC首次销售日期(MIN(first_sales_date))",
     -- 4. 销售计划(1~180天计算,超周期为NULL)
-    `plan_pre`                 DECIMAL(18,6)   COMMENT "销售计划(销售前)(口径6.3节,Q*ratio/180)",
-    `plan_post`                DECIMAL(18,6)   COMMENT "销售计划(销售后)(口径6.4节,(Q-cum_actual)*ratio/(181-N))",
+    `plan_pre`                 DECIMAL(18,6)   COMMENT "销售计划(销售前)(Q*ratio/180)",
+    `plan_post`                DECIMAL(18,6)   COMMENT "销售计划(销售后)((Q-cum_actual)*ratio/(181-N))",
     -- 5. 实际销售与累计
-    `daily_qty`                BIGINT          COMMENT "日销量(口径5.14/6.5节,第N天核心4渠道SUM(qty)按style_no聚合)",
-    `daily_amt`                DECIMAL(18,6)   COMMENT "日金额(口径5.15节,第N天核心4渠道SUM(amt))",
-    `cum_qty`                  BIGINT          COMMENT "累计销量(口径5.16节,截至当天N的累计)",
-    `cum_amt`                  DECIMAL(18,6)   COMMENT "累计金额(口径5.17节,截至当天N的累计)",
+    `daily_qty`                BIGINT          COMMENT "日销量(第N天核心4渠道SUM(qty)按style_no聚合)",
+    `daily_amt`                DECIMAL(18,6)   COMMENT "日金额(第N天核心4渠道SUM(amt))",
+    `cum_qty`                  BIGINT          COMMENT "累计销量(截至当天N的累计)",
+    `cum_amt`                  DECIMAL(18,6)   COMMENT "累计金额(截至当天N的累计)",
     -- 6. 达成情况
-    `achievement_rate`         DECIMAL(18,6)   COMMENT "达成情况(口径6.6节,daily_qty/plan_post)",
+    `achievement_rate`         DECIMAL(18,6)   COMMENT "达成情况(daily_qty/plan_post)",
     -- 7. 库存指标
-    `inventory_skc`            BIGINT          COMMENT "SKC在仓库存(口径5.9节,SUM(inventory_sku)按style_no聚合)",
-    `available_inventory`      BIGINT          COMMENT "SKC可提库存(口径5.10节,SUM(inventory_qty)按style_no聚合)",
-    `daily_avg_qty_30d`        DECIMAL(18,6)   COMMENT "SKC 30天平均日销(口径5.12节,核心4渠道)",
-    `sellable_days`            DECIMAL(18,6)   COMMENT "SKC可售周期天数(口径5.11节)",
+    `inventory_skc`            BIGINT          COMMENT "SKC在仓库存(SUM(inventory_sku)按style_no聚合)",
+    `available_inventory`      BIGINT          COMMENT "SKC可提库存(SUM(inventory_qty)按style_no聚合)",
+    `daily_avg_qty_30d`        DECIMAL(18,6)   COMMENT "SKC 30天平均日销(核心4渠道)",
+    `sellable_days`            DECIMAL(18,6)   COMMENT "SKC可售周期天数",
     -- 8. 当前快照指标(昨日/今日/7天/30天达成,同一SKC所有行值相同)
-    `yesterday_actual_qty`     BIGINT          COMMENT "昨日实际销售(口径5.21节)",
-    `yesterday_achievement`    DECIMAL(18,6)   COMMENT "昨日销售达成情况(口径5.22节)",
-    `7d_achievement`           DECIMAL(18,6)   COMMENT "7天销售达成情况(口径5.23节)",
-    `30d_achievement`          DECIMAL(18,6)   COMMENT "30天销售达成情况(口径5.24节)",
-    `today_plan_qty`           DECIMAL(18,6)   COMMENT "今日计划销售数量(口径5.25节,超周期为0)",
+    `yesterday_actual_qty`     BIGINT          COMMENT "昨日实际销售",
+    `yesterday_achievement`    DECIMAL(18,6)   COMMENT "昨日销售达成情况",
+    `7d_achievement`           DECIMAL(18,6)   COMMENT "7天销售达成情况",
+    `30d_achievement`          DECIMAL(18,6)   COMMENT "30天销售达成情况",
+    `today_plan_qty`           DECIMAL(18,6)   COMMENT "今日计划销售数量(超周期为0)",
     -- 9. 订货指标
-    `order_qty`                BIGINT          COMMENT "SKC订货数量Q(口径5.18节,SUM(order_qty))",
-    `total_order_qty`          BIGINT          COMMENT "SKC总订货数量(口径5.20节)",
-    `achievement_ratio`        DECIMAL(18,6)   COMMENT "SKC达成比例(口径5.19节)",
+    `order_qty`                BIGINT          COMMENT "SKC订货数量Q(SUM(order_qty))",
+    `total_order_qty`          BIGINT          COMMENT "SKC总订货数量",
+    `achievement_ratio`        DECIMAL(18,6)   COMMENT "SKC达成比例",
     -- 10. 技术字段
     `sync_time`                DATETIME        COMMENT "ODS同步时间",
     `insert_date`              DATETIME        COMMENT "ADS记录插入时间(ETL写入)",
     `update_date`              DATETIME        COMMENT "ADS记录更新时间(ETL写入)"
 ) ENGINE=OLAP
-DUPLICATE KEY(`style_no`, `sale_date`)
+PRIMARY KEY(`style_no`, `sale_date`)
 COMMENT "ADS层-SKC维度1~180天销售计划表(日刷新,韦德4核心渠道,核心表,QuickBI直接消费)"
 PARTITION BY RANGE(`sale_date`) ()
 DISTRIBUTED BY HASH(`style_no`) BUCKETS 32
 PROPERTIES (
-    "replication_num" = "1",
     "compression" = "LZ4",
-    "in_memory" = "false",
-    "storage_format" = "DEFAULT",
+    "enable_persistent_index" = "true",
     "fast_schema_evolution" = "true",
+    "replicated_storage" = "true",
+    "replication_num" = "1",
     "dynamic_partition.enable" = "true",
     "dynamic_partition.time_unit" = "DAY",
     "dynamic_partition.start" = "-730",
@@ -780,52 +780,45 @@ CREATE TABLE IF NOT EXISTS feishu_ads.ads_sku_skc_summary_d (
     `dim_type`                 VARCHAR(10)     COMMENT "维度类型(SKU/SKC)",
     `dim_value`                VARCHAR(255)    COMMENT "维度值(SKU=style_no_size,SKC=style_no)",
     -- 2. 维度属性
-    `brand`                    VARCHAR(20)     COMMENT "品牌(口径3.2/5.2节)",
+    `brand`                    VARCHAR(20)     COMMENT "品牌",
     `style_no`                 VARCHAR(128)    COMMENT "款号/SKC编码",
-    `ip`                       VARCHAR(100)    COMMENT "IP(口径3.4/5.4节,空值兜底None)",
-    `series`                   VARCHAR(100)    COMMENT "系列(口径3.3/5.3节,空值兜底None)",
+    `ip`                       VARCHAR(100)    COMMENT "IP(空值兜底None)",
+    `series`                   VARCHAR(100)    COMMENT "系列(空值兜底None)",
     `product_name`             VARCHAR(500)    COMMENT "商品名称",
-    `shelf_date`               DATE            COMMENT "上架日期(口径3.5/5.5节)",
-    `first_sales_date`         DATE            COMMENT "首次销售日期(口径3.6/5.6节)",
+    `shelf_date`               DATE            COMMENT "上架日期",
+    `first_sales_date`         DATE            COMMENT "首次销售日期",
     -- 3. 当前状态
-    `lifecycle_day`            BIGINT          COMMENT "当日已上架天数(口径3.7/5.7节)",
-    `sales_cycle_label`        VARCHAR(50)     COMMENT "销售周期标签(口径3.8/5.8节,新品期/热销期/清货期/超周期)",
+    `lifecycle_day`            BIGINT          COMMENT "当日已上架天数",
+    `sales_cycle_label`        VARCHAR(50)     COMMENT "销售周期标签(新品期/热销期/清货期/超周期)",
     -- 4. 订货指标
-    `order_qty`                BIGINT          COMMENT "订货数量Q(口径3.18/5.18节)",
-    `total_order_qty`          BIGINT          COMMENT "总订货数量(口径3.20/5.20节,订货+补货)",
+    `order_qty`                BIGINT          COMMENT "订货数量Q",
+    `total_order_qty`          BIGINT          COMMENT "总订货数量(订货+补货)",
     -- 5. 销售累计指标
-    `cum_qty`                  BIGINT          COMMENT "累计销量(口径3.16/5.16节,截至昨日)",
-    `cum_amt`                  DECIMAL(18,6)   COMMENT "累计金额(口径3.17/5.17节,截至昨日)",
+    `cum_qty`                  BIGINT          COMMENT "累计销量(截至昨日)",
+    `cum_amt`                  DECIMAL(18,6)   COMMENT "累计金额(截至昨日)",
     -- 6. 库存指标
-    `inventory_qty`            BIGINT          COMMENT "在仓库存(口径3.9/5.9节,SKU=inventory_sku,SKC=inventory_skc)",
-    `available_inventory`      BIGINT          COMMENT "可提库存(口径3.10/5.10节)",
-    `daily_avg_qty_30d`        DECIMAL(18,6)   COMMENT "30天平均日销(口径3.12/5.12节)",
-    `sellable_days`            DECIMAL(18,6)   COMMENT "可售周期天数(口径3.11/5.11节)",
+    `inventory_qty`            BIGINT          COMMENT "在仓库存(SKU=inventory_sku,SKC=inventory_skc)",
+    `available_inventory`      BIGINT          COMMENT "可提库存",
+    `daily_avg_qty_30d`        DECIMAL(18,6)   COMMENT "30天平均日销",
+    `sellable_days`            DECIMAL(18,6)   COMMENT "可售周期天数",
     -- 7. 达成指标
-    `achievement_ratio`        DECIMAL(18,6)   COMMENT "达成比例(口径3.19/5.19节,累计销量/订货数量)",
-    `yesterday_actual_qty`     BIGINT          COMMENT "昨日实际销售(口径3.21/5.21节)",
-    `today_plan_qty`           DECIMAL(18,6)   COMMENT "今日计划销售数量(口径3.25/5.25节,超周期为0)",
+    `achievement_ratio`        DECIMAL(18,6)   COMMENT "达成比例(累计销量/订货数量)",
+    `yesterday_actual_qty`     BIGINT          COMMENT "昨日实际销售",
+    `today_plan_qty`           DECIMAL(18,6)   COMMENT "今日计划销售数量(超周期为0)",
     -- 8. 技术字段
     `sync_time`                DATETIME        COMMENT "ODS同步时间",
     `insert_date`              DATETIME        COMMENT "ADS记录插入时间(ETL写入)",
     `update_date`              DATETIME        COMMENT "ADS记录更新时间(ETL写入)"
 ) ENGINE=OLAP
-DUPLICATE KEY(`dim_type`, `dim_value`)
+PRIMARY KEY(`dim_type`, `dim_value`)
 COMMENT "ADS层-SKU/SKC汇总表(日刷新,韦德4核心渠道,辅助表,QuickBI展示汇总信息)"
-PARTITION BY RANGE(`insert_date`) ()
 DISTRIBUTED BY HASH(`dim_value`) BUCKETS 16
 PROPERTIES (
-    "replication_num" = "1",
     "compression" = "LZ4",
-    "in_memory" = "false",
-    "storage_format" = "DEFAULT",
+    "enable_persistent_index" = "true",
     "fast_schema_evolution" = "true",
-    "dynamic_partition.enable" = "true",
-    "dynamic_partition.time_unit" = "DAY",
-    "dynamic_partition.start" = "-365",
-    "dynamic_partition.end" = "3",
-    "dynamic_partition.prefix" = "p",
-    "dynamic_partition.history_partition_num" = "365"
+    "replicated_storage" = "true",
+    "replication_num" = "1"
 );
 ```
 
