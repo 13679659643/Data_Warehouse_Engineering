@@ -1442,7 +1442,8 @@ SELECT
     COALESCE(DATE(首次提货日期), DATE('1970-01-01'))                         AS first_pickup_date,         -- 【修改】ODS为datetime
     COALESCE(NULLIF(TRIM(计划销售时间), ''), 'None')                         AS planned_sales_time,
     COALESCE(NULLIF(TRIM(预计上架时间), ''), 'None')                         AS est_shelf_time,
-    COALESCE(DATE(上架日期), DATE('1970-01-01'))                             AS shelf_date,      -- 【修改】ODS为datetime，去掉TRIM/NULLIF
+    -- 20260713 上架日期 --> 实际上架日期
+    COALESCE(DATE(实际上架日期), DATE('1970-01-01'))                             AS shelf_date,      -- 【修改】ODS为datetime，去掉TRIM/NULLIF
     COALESCE(DATE(首次销售日期), DATE('1970-01-01'))                         AS first_sales_date,-- 【修改】ODS为datetime，去掉TRIM/NULLIF
     COALESCE(DATE(NULLIF(TRIM(实际售卖最小日期), '')), DATE('1970-01-01'))   AS actual_sales_min_date, -- ODS为varchar，保留
     COALESCE(NULLIF(TRIM(首次订货季度), ''), 'None')                         AS first_order_quarter,
@@ -1620,8 +1621,17 @@ SELECT
     
     -- 4. 到货信息
     COALESCE(NULLIF(TRIM(预计到货月份), ''), 'None')                        AS est_arrival_month,
-    -- ODS为DATETIME，去掉TRIM
-    COALESCE(CAST(预计到货日期 AS DATE), '1970-01-01')                      AS est_arrival_date,
+    -- ODS为DATETIME，去掉TRIM 20260713 预计到货日期 -->预计到货时间
+    COALESCE(
+            CAST(
+                CASE 
+                    WHEN `预计到货时间` REGEXP '^[0-9]{4}[-/][0-9]{2}[-/][0-9]{2}$' 
+                    THEN REPLACE(`预计到货时间`, '/', '-')
+                    ELSE NULL 
+                END AS DATE
+            ), 
+            CAST('1970-01-01' AS DATE)
+        )                                                                 AS est_arrival_date,
     COALESCE(NULLIF(TRIM(到货月份是否确认), ''), 'None')                    AS arrival_confirmed,
     -- ODS为DATETIME，去掉TRIM
     COALESCE(CAST(品牌方确认日期 AS DATE), '1970-01-01')                    AS brand_confirm_date,
@@ -1655,6 +1665,7 @@ SELECT
     NOW()                                                                   AS update_date                                 -- ETL写入更新时间
 FROM feishu.t_361_shop
 WHERE SKU IS NOT NULL AND TRIM(SKU) <> '';                    -- 过滤空SKU（577条空SKU被过滤）
+
 
 
 
