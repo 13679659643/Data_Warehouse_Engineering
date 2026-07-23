@@ -194,6 +194,9 @@ CREATE TABLE IF NOT EXISTS feishu_ads.ads_sku_sales_plan_180d_d (
     `daily_amt`                DECIMAL(18,6)   COMMENT "日金额(第N天核心4渠道SUM(amt))",
     `cum_qty`                  BIGINT          COMMENT "累计销量(截至当天N的累计)",
     `cum_amt`                  DECIMAL(18,6)   COMMENT "累计金额(截至当天N的累计)",
+    -- 5.1 累计计划(截至N-1天,来自DWS销售计划表)
+    `cum_plan_qty`             DECIMAL(18,6)   COMMENT "累计计划销量(截至N-1天,SUM(plan_post)窗口累计)",
+    `cum_plan_amt`             DECIMAL(18,6)   COMMENT "累计计划金额(截至N-1天,占位0)",
     -- 6. 达成情况
     `achievement_rate`         DECIMAL(18,6)   COMMENT "达成情况(daily_qty/plan_post,plan_post=0时NULL)",
     -- 7. 库存指标
@@ -211,6 +214,7 @@ CREATE TABLE IF NOT EXISTS feishu_ads.ads_sku_sales_plan_180d_d (
     `order_qty`                BIGINT          COMMENT "订货数量Q(空值兜底0)",
     `total_order_qty`          BIGINT          COMMENT "总订货数量(订货+补货)",
     `achievement_ratio`        DECIMAL(18,6)   COMMENT "达成比例(累计销量/订货数量)",
+    `should_achieve_ratio`     DECIMAL(18,6)   COMMENT "应达成比例(累计计划销量/订货数量,取DWS商品维表最新值)",
     -- 10. 技术字段
     `sync_time`                DATETIME        COMMENT "ODS同步时间",
     `insert_date`              DATETIME        COMMENT "ADS记录插入时间(ETL写入)",
@@ -245,10 +249,11 @@ INSERT INTO feishu_ads.ads_sku_sales_plan_180d_d (
     is_over_cycle, brand, style_no, size, ip, series, color_name,
     product_name, category, tag_price, shelf_date, first_sales_date,
     plan_pre, plan_post, daily_qty, daily_amt, cum_qty, cum_amt,
+    cum_plan_qty, cum_plan_amt,
     achievement_rate, inventory_sku, available_inventory, daily_avg_qty_30d,
     sellable_days, yesterday_actual_qty, yesterday_achievement,
     `7d_achievement`, `30d_achievement`, today_plan_qty,
-    order_qty, total_order_qty, achievement_ratio,
+    order_qty, total_order_qty, achievement_ratio, should_achieve_ratio,
     sync_time, insert_date, update_date
 )
 WITH
@@ -265,6 +270,7 @@ product_info AS (
         pi.first_sales_date                                AS first_sales_date,
         pi.daily_avg_qty_30d                               AS daily_avg_qty_30d,
         pi.achievement_ratio                               AS achievement_ratio,
+        pi.should_achieve_ratio                            AS should_achieve_ratio,
         COALESCE(pi.total_order_qty, 0)                    AS total_order_qty
     FROM feishu_dws.dws_sku_product_info_d pi
 ),
@@ -358,6 +364,10 @@ SELECT
     COALESCE(sp.cum_actual, 0) + COALESCE(sp.actual_qty, 0) AS cum_qty,
     -- 口径3.17节：累计金额
     COALESCE(sp.cum_actual_amt, 0) + COALESCE(sp.actual_amt, 0) AS cum_amt,
+    -- 累计计划销量(截至N-1天)：直接取DWS销售计划表的 cum_plan_qty
+    sp.cum_plan_qty                                         AS cum_plan_qty,
+    -- 累计计划金额(截至N-1天)：占位0
+    CAST(0 AS DECIMAL(18,6))                                AS cum_plan_amt,
     -- 口径4.6节：达成情况
     sp.achievement_rate                                      AS achievement_rate,
     -- 口径3.9节：在仓库存
@@ -384,6 +394,8 @@ SELECT
     pi.total_order_qty                                       AS total_order_qty,
     -- 口径3.19节：达成比例
     pi.achievement_ratio                                     AS achievement_ratio,
+    -- 应达成比例：直接取DWS商品维表的 should_achieve_ratio
+    pi.should_achieve_ratio                                  AS should_achieve_ratio,
     sp.sync_time                                             AS sync_time,
     CURRENT_TIMESTAMP()                                      AS insert_date,
     CURRENT_TIMESTAMP()                                      AS update_date
@@ -496,6 +508,9 @@ CREATE TABLE IF NOT EXISTS feishu_ads.ads_skc_sales_plan_180d_d (
     `daily_amt`                DECIMAL(18,6)   COMMENT "日金额(第N天核心4渠道SUM(amt))",
     `cum_qty`                  BIGINT          COMMENT "累计销量(截至当天N的累计)",
     `cum_amt`                  DECIMAL(18,6)   COMMENT "累计金额(截至当天N的累计)",
+    -- 5.1 累计计划(截至N-1天,来自DWS销售计划表)
+    `cum_plan_qty`             DECIMAL(18,6)   COMMENT "SKC累计计划销量(截至N-1天,SUM(plan_post)窗口累计)",
+    `cum_plan_amt`             DECIMAL(18,6)   COMMENT "SKC累计计划金额(截至N-1天,占位0)",
     -- 6. 达成情况
     `achievement_rate`         DECIMAL(18,6)   COMMENT "达成情况(daily_qty/plan_post)",
     -- 7. 库存指标
@@ -513,6 +528,7 @@ CREATE TABLE IF NOT EXISTS feishu_ads.ads_skc_sales_plan_180d_d (
     `order_qty`                BIGINT          COMMENT "SKC订货数量Q(SUM(order_qty))",
     `total_order_qty`          BIGINT          COMMENT "SKC总订货数量",
     `achievement_ratio`        DECIMAL(18,6)   COMMENT "SKC达成比例",
+    `should_achieve_ratio`     DECIMAL(18,6)   COMMENT "SKC应达成比例(累计计划销量/订货数量,取DWS商品维表最新值)",
     -- 10. 技术字段
     `sync_time`                DATETIME        COMMENT "ODS同步时间",
     `insert_date`              DATETIME        COMMENT "ADS记录插入时间(ETL写入)",
@@ -546,10 +562,11 @@ INSERT INTO feishu_ads.ads_skc_sales_plan_180d_d (
     style_no, sale_date, lifecycle_day, sale_date_label, sales_phase,
     is_over_cycle, brand, ip, series, product_name, category, tag_price,
     shelf_date, first_sales_date, plan_pre, plan_post, daily_qty, daily_amt,
-    cum_qty, cum_amt, achievement_rate, inventory_skc, available_inventory,
+    cum_qty, cum_amt, cum_plan_qty, cum_plan_amt,
+    achievement_rate, inventory_skc, available_inventory,
     daily_avg_qty_30d, sellable_days, yesterday_actual_qty,
     yesterday_achievement, `7d_achievement`, `30d_achievement`, today_plan_qty,
-    order_qty, total_order_qty, achievement_ratio,
+    order_qty, total_order_qty, achievement_ratio, should_achieve_ratio,
     sync_time, insert_date, update_date
 )
 WITH
@@ -566,6 +583,7 @@ product_info_skc AS (
         pi.first_sales_date                                 AS first_sales_date,
         pi.daily_avg_qty_30d                                AS daily_avg_qty_30d,
         pi.achievement_ratio                                AS achievement_ratio,
+        pi.should_achieve_ratio                             AS should_achieve_ratio,
         COALESCE(pi.total_order_qty, 0)                     AS total_order_qty
     FROM feishu_dws.dws_skc_product_info_d pi
 ),
@@ -654,6 +672,10 @@ SELECT
     COALESCE(sp.cum_actual, 0) + COALESCE(sp.actual_qty, 0) AS cum_qty,
     -- 口径5.17节：累计金额
     COALESCE(sp.cum_actual_amt, 0) + COALESCE(sp.actual_amt, 0) AS cum_amt,
+    -- SKC累计计划销量(截至N-1天)：直接取DWS销售计划表的 cum_plan_qty
+    sp.cum_plan_qty                                         AS cum_plan_qty,
+    -- SKC累计计划金额(截至N-1天)：占位0
+    CAST(0 AS DECIMAL(18,6))                                AS cum_plan_amt,
     -- 口径6.6节：达成情况
     sp.achievement_rate                                      AS achievement_rate,
     -- 口径5.9节：SKC在仓库存
@@ -680,6 +702,8 @@ SELECT
     pi.total_order_qty                                       AS total_order_qty,
     -- 口径5.19节：SKC达成比例
     pi.achievement_ratio                                     AS achievement_ratio,
+    -- SKC应达成比例：直接取DWS商品维表的 should_achieve_ratio
+    pi.should_achieve_ratio                                  AS should_achieve_ratio,
     sp.sync_time                                             AS sync_time,
     CURRENT_TIMESTAMP()                                      AS insert_date,
     CURRENT_TIMESTAMP()                                      AS update_date
@@ -927,6 +951,8 @@ LIMIT 20;
 | daily_amt | dws_sku/skc_sales_plan_180d_d.actual_amt | 3.15/5.15 | 日金额 |
 | cum_qty | dws cum_actual + actual_qty | 3.16/5.16 | 累计销量 |
 | cum_amt | dws cum_actual_amt + actual_amt | 3.17/5.17 | 累计金额 |
+| cum_plan_qty | dws_sku/skc_sales_plan_180d_d.cum_plan_qty | 新增 | 累计计划销量(截至N-1天) |
+| cum_plan_amt | 占位0 | 新增 | 累计计划金额(截至N-1天,占位) |
 | achievement_rate | dws_sku/skc_sales_plan_180d_d | 4.6/6.6 | 达成情况 |
 | inventory_sku/skc | dws_sku/skc_sales_plan_180d_d | 3.9/5.9 | 在仓库存 |
 | available_inventory | dws_sku/skc_sales_plan_180d_d | 3.10/5.10 | 可提库存 |
@@ -940,6 +966,7 @@ LIMIT 20;
 | order_qty | dws_sku/skc_sales_plan_180d_d | 3.18/5.18 | 订货数量Q |
 | total_order_qty | dws_sku/skc_product_info_d | 3.20/5.20 | 总订货数量 |
 | achievement_ratio | dws_sku/skc_product_info_d | 3.19/5.19 | 达成比例 |
+| should_achieve_ratio | dws_sku/skc_product_info_d.should_achieve_ratio | 新增 | 应达成比例(累计计划销量/订货数量) |
 
 ---
 
