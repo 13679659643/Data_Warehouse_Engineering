@@ -57,6 +57,7 @@ SELECT
     `sale_date`                AS `销售日期`,
     `lifecycle_day`            AS `上市第N天`,
     `sale_date_label`          AS `销售日期标签`,
+    REPLACE(`sale_date_label`, '第', '') AS `销售日期标签_简洁版`,
 	    -- 新增排序字段：将"第N天"的N提取并左补零至3位，超周期赋值为999，确保按字符串升序排列时顺序正确
     CASE 
         WHEN `sale_date_label` = '超周期' THEN '999'
@@ -124,6 +125,7 @@ SELECT
     `sale_date`                AS `销售日期`,
     `lifecycle_day`            AS `上市第N天`,
     `sale_date_label`          AS `销售日期标签`,
+    REPLACE(`sale_date_label`, '第', '') AS `销售日期标签_简洁版`,
 	    -- 新增排序字段：将"第N天"的N提取并左补零至3位，超周期赋值为999，确保按字符串升序排列时顺序正确
     CASE 
         WHEN `sale_date_label` = '超周期' THEN '999'

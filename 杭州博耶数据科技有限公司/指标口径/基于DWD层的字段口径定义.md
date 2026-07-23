@@ -151,7 +151,7 @@
 
 | 项       | 说明                                       |
 | -------- | ------------------------------------------ |
-| 数据来源 | `dwd_feishu_product_all_d.style_no`           |
+| 数据来源 | `dwd_feishu_product_all_d.style_no` + `dwd_feishu_product_all_d.size` |
 | 口径     | 直接取值                                   |
 | 粒度     | 一条SKU一条记录                            |
 | 边界     | 过滤 `style_no_size IS NOT NULL AND style_no_size <> 'None'` |
