@@ -214,7 +214,7 @@ CREATE TABLE IF NOT EXISTS feishu_ads.ads_sku_sales_plan_180d_d (
     `order_qty`                BIGINT          COMMENT "订货数量Q(空值兜底0)",
     `total_order_qty`          BIGINT          COMMENT "总订货数量(订货+补货)",
     `achievement_ratio`        DECIMAL(18,6)   COMMENT "达成比例(累计销量/订货数量)",
-    `should_achieve_ratio`     DECIMAL(18,6)   COMMENT "应达成比例(累计计划销量/订货数量,取DWS商品维表最新值)",
+    `should_achieve_ratio`     DECIMAL(18,6)   COMMENT "应达成比例(累计计划销量/订货数量Q,取DWS销售计划表对应行cum_plan_qty/order_qty)",
     -- 10. 技术字段
     `sync_time`                DATETIME        COMMENT "ODS同步时间",
     `insert_date`              DATETIME        COMMENT "ADS记录插入时间(ETL写入)",
@@ -270,7 +270,6 @@ product_info AS (
         pi.first_sales_date                                AS first_sales_date,
         pi.daily_avg_qty_30d                               AS daily_avg_qty_30d,
         pi.achievement_ratio                               AS achievement_ratio,
-        pi.should_achieve_ratio                            AS should_achieve_ratio,
         COALESCE(pi.total_order_qty, 0)                    AS total_order_qty
     FROM feishu_dws.dws_sku_product_info_d pi
 ),
@@ -394,8 +393,8 @@ SELECT
     pi.total_order_qty                                       AS total_order_qty,
     -- 口径3.19节：达成比例
     pi.achievement_ratio                                     AS achievement_ratio,
-    -- 应达成比例：直接取DWS商品维表的 should_achieve_ratio
-    pi.should_achieve_ratio                                  AS should_achieve_ratio,
+    -- 应达成比例：直接取DWS销售计划表的 should_achieve_ratio(基于截至N-1天的cum_plan_qty/order_qty)
+    sp.should_achieve_ratio                                  AS should_achieve_ratio,
     sp.sync_time                                             AS sync_time,
     CURRENT_TIMESTAMP()                                      AS insert_date,
     CURRENT_TIMESTAMP()                                      AS update_date
@@ -528,7 +527,7 @@ CREATE TABLE IF NOT EXISTS feishu_ads.ads_skc_sales_plan_180d_d (
     `order_qty`                BIGINT          COMMENT "SKC订货数量Q(SUM(order_qty))",
     `total_order_qty`          BIGINT          COMMENT "SKC总订货数量",
     `achievement_ratio`        DECIMAL(18,6)   COMMENT "SKC达成比例",
-    `should_achieve_ratio`     DECIMAL(18,6)   COMMENT "SKC应达成比例(累计计划销量/订货数量,取DWS商品维表最新值)",
+    `should_achieve_ratio`     DECIMAL(18,6)   COMMENT "SKC应达成比例(累计计划销量/订货数量Q,取DWS销售计划表对应行cum_plan_qty/order_qty)",
     -- 10. 技术字段
     `sync_time`                DATETIME        COMMENT "ODS同步时间",
     `insert_date`              DATETIME        COMMENT "ADS记录插入时间(ETL写入)",
@@ -583,7 +582,6 @@ product_info_skc AS (
         pi.first_sales_date                                 AS first_sales_date,
         pi.daily_avg_qty_30d                                AS daily_avg_qty_30d,
         pi.achievement_ratio                                AS achievement_ratio,
-        pi.should_achieve_ratio                             AS should_achieve_ratio,
         COALESCE(pi.total_order_qty, 0)                     AS total_order_qty
     FROM feishu_dws.dws_skc_product_info_d pi
 ),
@@ -702,8 +700,8 @@ SELECT
     pi.total_order_qty                                       AS total_order_qty,
     -- 口径5.19节：SKC达成比例
     pi.achievement_ratio                                     AS achievement_ratio,
-    -- SKC应达成比例：直接取DWS商品维表的 should_achieve_ratio
-    pi.should_achieve_ratio                                  AS should_achieve_ratio,
+    -- SKC应达成比例：直接取DWS销售计划表的 should_achieve_ratio(基于截至N-1天的cum_plan_qty/order_qty)
+    sp.should_achieve_ratio                                  AS should_achieve_ratio,
     sp.sync_time                                             AS sync_time,
     CURRENT_TIMESTAMP()                                      AS insert_date,
     CURRENT_TIMESTAMP()                                      AS update_date
@@ -966,7 +964,7 @@ LIMIT 20;
 | order_qty | dws_sku/skc_sales_plan_180d_d | 3.18/5.18 | 订货数量Q |
 | total_order_qty | dws_sku/skc_product_info_d | 3.20/5.20 | 总订货数量 |
 | achievement_ratio | dws_sku/skc_product_info_d | 3.19/5.19 | 达成比例 |
-| should_achieve_ratio | dws_sku/skc_product_info_d.should_achieve_ratio | 新增 | 应达成比例(累计计划销量/订货数量) |
+| should_achieve_ratio | dws_sku/skc_sales_plan_180d_d.should_achieve_ratio | 新增 | 应达成比例(累计计划销量/订货数量,基于截至N-1天的cum_plan_qty/order_qty) |
 
 ---
 

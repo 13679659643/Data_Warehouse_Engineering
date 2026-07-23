@@ -73,6 +73,8 @@ SELECT
     `daily_amt`                AS `日金额`,
     `cum_qty`                  AS `累计销量`,
     `cum_amt`                  AS `累计金额`,
+    `cum_plan_qty`             AS `累计计划销量`,
+    `cum_plan_amt`             AS `累计计划金额`,
     -- 6. 达成情况
     `achievement_rate`         AS `达成情况`,
     `achievement_ratio`        AS `达成比例`,
@@ -89,7 +91,8 @@ SELECT
     `today_plan_qty`           AS `今日计划销售数量`,
     -- 9. 订货指标
     `order_qty`                AS `订货数量`,
-    `total_order_qty`          AS `总订货数量`
+    `total_order_qty`          AS `总订货数量`,
+    `should_achieve_ratio`     AS `应达成比例`
 FROM feishu_ads.ads_sku_sales_plan_180d_d;
 ```
 
@@ -141,6 +144,8 @@ SELECT
     `daily_amt`                AS `日金额`,
     `cum_qty`                  AS `累计销量`,
     `cum_amt`                  AS `累计金额`,
+    `cum_plan_qty`             AS `SKC累计计划销量`,
+    `cum_plan_amt`             AS `SKC累计计划金额`,
     -- 6. 达成情况
     `achievement_rate`         AS `达成情况`,
     `achievement_ratio`        AS `SKC达成比例`,
@@ -157,7 +162,8 @@ SELECT
     `today_plan_qty`           AS `今日计划销售数量`,
     -- 9. 订货指标
     `order_qty`                AS `SKC订货数量`,
-    `total_order_qty`          AS `SKC总订货数量`
+    `total_order_qty`          AS `SKC总订货数量`,
+    `should_achieve_ratio`     AS `SKC应达成比例`
 FROM feishu_ads.ads_skc_sales_plan_180d_d;
 ```
 

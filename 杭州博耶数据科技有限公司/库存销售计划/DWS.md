@@ -782,6 +782,7 @@ CREATE TABLE IF NOT EXISTS feishu_dws.dws_sku_sales_plan_180d_d (
     `cum_actual_amt`       DECIMAL(18,6)   COMMENT "累计实际金额(截至N-1天的SUM(amt))",
     `cum_plan_qty`         DECIMAL(18,6)   COMMENT "累计计划销量(截至N-1天,SUM(plan_post)窗口累计)",
     `cum_plan_amt`         DECIMAL(18,6)   COMMENT "累计计划金额(截至N-1天,占位0)",
+    `should_achieve_ratio` DECIMAL(18,6)   COMMENT "应达成比例(累计计划销量/订货数量Q,基于截至N-1天的cum_plan_qty)",
     -- 7. 达成情况
     `achievement_rate`     DECIMAL(18,6)   COMMENT "达成情况(actual_qty/plan_post,plan_post=0时NULL)",
     -- 8. 库存（每日快照）
@@ -826,7 +827,7 @@ INSERT INTO feishu_dws.dws_sku_sales_plan_180d_d (
     style_no_size, sale_date, lifecycle_day, sale_date_label,
     sales_cycle_label, ratio, brand, style_no, size, shelf_date,
     order_qty, plan_pre, plan_post, actual_qty, actual_amt,
-    cum_actual, cum_actual_amt, cum_plan_qty, cum_plan_amt, achievement_rate,
+    cum_actual, cum_actual_amt, cum_plan_qty, cum_plan_amt, should_achieve_ratio, achievement_rate,
     inventory_sku, available_inventory, sellable_days,
     sync_time, insert_date, update_date
 )
@@ -1033,6 +1034,10 @@ SELECT
     sc.cum_plan_qty                                        AS cum_plan_qty,
     -- 累计计划金额 = 截至N-1天，占位0（后续补全）
     CAST(0 AS DECIMAL(18,6))                               AS cum_plan_amt,
+    -- 应达成比例 = 累计计划销量 / 订货数量Q（基于截至N-1天的cum_plan_qty）
+    --   超周期段 cum_plan_qty 为 NULL，结果为 NULL
+    CAST(sc.cum_plan_qty AS DECIMAL(18,6))
+        / NULLIF(CAST(sc.order_qty AS DECIMAL(18,6)), 0)   AS should_achieve_ratio,
     -- 口径4.6节：达成情况 = actual_qty / plan_post
     CASE WHEN sc.lifecycle_day BETWEEN 1 AND 180
          THEN CAST(sc.actual_qty AS DECIMAL(18,6))
@@ -1190,6 +1195,7 @@ CREATE TABLE IF NOT EXISTS feishu_dws.dws_skc_sales_plan_180d_d (
     `cum_actual_amt`       DECIMAL(18,6)   COMMENT "累计实际金额(截至N-1天)",
     `cum_plan_qty`         DECIMAL(18,6)   COMMENT "SKC累计计划销量(截至N-1天,SUM(plan_post)窗口累计)",
     `cum_plan_amt`         DECIMAL(18,6)   COMMENT "SKC累计计划金额(截至N-1天,占位0)",
+    `should_achieve_ratio` DECIMAL(18,6)   COMMENT "SKC应达成比例(累计计划销量/订货数量Q,基于截至N-1天的cum_plan_qty)",
     -- 7. 达成情况
     `achievement_rate`     DECIMAL(18,6)   COMMENT "达成情况(actual_qty/plan_post)",
     -- 8. 库存
@@ -1234,7 +1240,7 @@ INSERT INTO feishu_dws.dws_skc_sales_plan_180d_d (
     style_no, sale_date, lifecycle_day, sale_date_label,
     sales_cycle_label, ratio, brand, shelf_date,
     order_qty, plan_pre, plan_post, actual_qty, actual_amt,
-    cum_actual, cum_actual_amt, cum_plan_qty, cum_plan_amt, achievement_rate,
+    cum_actual, cum_actual_amt, cum_plan_qty, cum_plan_amt, should_achieve_ratio, achievement_rate,
     inventory_sku, available_inventory, sellable_days,
     sync_time, insert_date, update_date
 )
@@ -1429,6 +1435,10 @@ SELECT
     sc.cum_plan_qty                                        AS cum_plan_qty,
     -- SKC累计计划金额 = 截至N-1天，占位0（后续补全）
     CAST(0 AS DECIMAL(18,6))                               AS cum_plan_amt,
+    -- SKC应达成比例 = 累计计划销量 / 订货数量Q（基于截至N-1天的cum_plan_qty）
+    --   超周期段 cum_plan_qty 为 NULL，结果为 NULL
+    CAST(sc.cum_plan_qty AS DECIMAL(18,6))
+        / NULLIF(CAST(sc.order_qty AS DECIMAL(18,6)), 0) AS should_achieve_ratio,
     -- 口径6.6节：达成情况 = actual_qty / plan_post
     CASE WHEN sc.lifecycle_day BETWEEN 1 AND 180
          THEN CAST(sc.actual_qty AS DECIMAL(18,6))
