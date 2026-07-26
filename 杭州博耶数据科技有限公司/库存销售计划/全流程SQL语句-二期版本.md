@@ -3553,6 +3553,7 @@ boa_agg AS (
         COALESCE(SUM(boa.order_qty), 0)                    AS order_qty,
         MIN(boa.`30_est_arrival_date`)                     AS est_arrival_date
     FROM feishu_dwd.dwd_feishu_brand_order_arrival_d boa
+    where 1=1  AND boa.`30_est_arrival_date` IS NOT NULL
     GROUP BY boa.style_no_size
 ),
 -- 2. 商品库基础信息 + shelf_date 补全（口径3.5节）
