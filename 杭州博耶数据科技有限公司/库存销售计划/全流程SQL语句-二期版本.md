@@ -956,7 +956,11 @@ CREATE TABLE IF NOT EXISTS feishu_ads.ads_sku_sales_plan_180d_d (
     `order_qty_ratio`          DECIMAL(18,6)   COMMENT "订货比例(单个SKU order_qty / SUM(order_qty) by style_no,SKU维度当前时间常量,每天刷新)",
     `achievement_ratio`        DECIMAL(18,6)   COMMENT "达成比例(累计销量/订货数量)",
     `should_achieve_ratio`     DECIMAL(18,6)   COMMENT "应达成比例(累计计划销量/订货数量Q,取DWS销售计划表对应行cum_plan_qty/order_qty)",
-    -- 10. 技术字段
+    -- 10. 当前时间常量指标(SKU维度当前时间常量,每天刷新,同一SKU不同sale_date值相同)
+    `current_cum_actual`         BIGINT        COMMENT "SKU累计实际销量(截至N天,核心4渠道,取DWS商品维表cum_actual,SKU维度当前时间常量,每天刷新)",
+    `current_achievement_ratio`  DECIMAL(18,6) COMMENT "当前达成比例(取DWS商品维表achievement_ratio,SKU维度当前时间常量,每天刷新)",
+    `current_should_achieve_ratio` DECIMAL(18,6) COMMENT "当前应达成比例(取DWS商品维表should_achieve_ratio,SKU维度当前时间常量,每天刷新)",
+    -- 11. 技术字段
     `sync_time`                DATETIME        COMMENT "ODS同步时间",
     `insert_date`              DATETIME        COMMENT "ADS记录插入时间(ETL写入)",
     `update_date`              DATETIME        COMMENT "ADS记录更新时间(ETL写入)"
@@ -1027,7 +1031,11 @@ CREATE TABLE IF NOT EXISTS feishu_ads.ads_skc_sales_plan_180d_d (
     `total_order_qty`          BIGINT          COMMENT "SKC总订货数量",
     `achievement_ratio`        DECIMAL(18,6)   COMMENT "SKC达成比例",
     `should_achieve_ratio`     DECIMAL(18,6)   COMMENT "SKC应达成比例(累计计划销量/订货数量Q,取DWS销售计划表对应行cum_plan_qty/order_qty)",
-    -- 10. 技术字段
+    -- 10. 当前时间常量指标(SKC维度当前时间常量,每天刷新,同一SKC不同sale_date值相同)
+    `current_cum_actual`         BIGINT        COMMENT "SKC累计实际销量(截至N天,核心4渠道,取DWS商品维表cum_actual,SKC维度当前时间常量,每天刷新)",
+    `current_achievement_ratio`  DECIMAL(18,6) COMMENT "当前SKC达成比例(取DWS商品维表achievement_ratio,SKC维度当前时间常量,每天刷新)",
+    `current_should_achieve_ratio` DECIMAL(18,6) COMMENT "当前SKC应达成比例(取DWS商品维表should_achieve_ratio,SKC维度当前时间常量,每天刷新)",
+    -- 11. 技术字段
     `sync_time`                DATETIME        COMMENT "ODS同步时间",
     `insert_date`              DATETIME        COMMENT "ADS记录插入时间(ETL写入)",
     `update_date`              DATETIME        COMMENT "ADS记录更新时间(ETL写入)"
@@ -4629,11 +4637,14 @@ INSERT INTO feishu_ads.ads_sku_sales_plan_180d_d (
     `7d_achievement`, `30d_achievement`, today_plan_qty, sales_qty_ratio,
     order_qty, total_order_qty, order_qty_ratio,
     achievement_ratio, should_achieve_ratio,
+    current_cum_actual, current_achievement_ratio, current_should_achieve_ratio,
     sync_time, insert_date, update_date
 )
 WITH
--- 1. 商品维表补充属性（口径3.3/3.4/3.6节、二期口径字段SKU第5/6节）
+-- 1. 商品维表补充属性（口径3.3/3.4/3.6节、二期口径字段SKU第5/6/7节）
 --    新增取 cum_actual、sellable_days_order、order_qty_ratio，供ADS层直接使用
+--    二期口径字段SKU第7节：cum_actual作为SKU维度当前时间常量,持久化为current_cum_actual
+--    二期口径字段SKU第6节：achievement_ratio、should_achieve_ratio作为SKU维度当前时间常量,持久化为current_xxx
 product_info AS (
     SELECT
         pi.style_no_size                                   AS style_no_size,
@@ -4652,6 +4663,7 @@ product_info AS (
         -- 二期口径字段SKU第6节：订货比例(从DWS商品维表取,SKU维度当前时间常量)
         pi.order_qty_ratio                                 AS order_qty_ratio,
         -- 二期口径字段SKU第7节：累计实际销量(截至N-1天,从DWS商品维表取,供ADS层销售比例使用)
+        -- 同时作为current_cum_actual持久化(SKU维度当前时间常量,截至N天与N-1天相同)
         COALESCE(pi.cum_actual, 0)                         AS cum_actual,
         -- 二期口径字段SKU第4节：已销售天数(当前时间的lifecycle_day常量,SKU维度当前时间常量)
         pi.lifecycle_day                                   AS current_lifecycle_day
@@ -4716,6 +4728,18 @@ sales_ratio_by_style AS (
         SUM(COALESCE(pi.cum_actual, 0))                    AS cum_actual_style_sum
     FROM feishu_dws.dws_sku_product_info_d pi
     GROUP BY pi.style_no
+),
+-- 4. 应达成比例辅助：取销售计划表中每个SKU的最新累计计划销量
+--    二期口径字段SKU第7节：current_should_achieve_ratio = 最新cum_plan_qty / order_qty
+--    口径：cum_plan_qty 为截至N-1天的累计计划销量，取昨日(DATE_SUB(CURRENT_DATE(),1))对应行
+--    昨日无记录时（如上架第1天、超周期SKU）取 NULL，应达成比例返回 NULL
+--    与 sp.should_achieve_ratio 同源(销售计划表),保证口径一致
+latest_cum_plan AS (
+    SELECT
+        sp.style_no_size                                   AS style_no_size,
+        sp.cum_plan_qty                                    AS cum_plan_qty
+    FROM feishu_dws.dws_sku_sales_plan_180d_d sp
+    WHERE sp.sale_date = DATE_SUB(CURRENT_DATE(), 1)
 )
 SELECT
     sp.style_no_size                                          AS style_no_size,
@@ -4858,6 +4882,17 @@ SELECT
     pi.achievement_ratio                                     AS achievement_ratio,
     -- 应达成比例：直接取DWS销售计划表的 should_achieve_ratio(基于截至N-1天的cum_plan_qty/order_qty)
     sp.should_achieve_ratio                                  AS should_achieve_ratio,
+    -- 二期口径字段SKU第7节：current_cum_actual = SKU累计实际销量(截至N天,核心4渠道)
+    --    取DWS商品维表cum_actual(SKU维度当前时间常量,每天刷新,同一SKU不同sale_date值相同)
+    --    在当前时间维度下只有N-1的数据,所以截止到N和N-1的数据是一样的
+    pi.cum_actual                                            AS current_cum_actual,
+    -- 二期口径字段SKU第7节：current_achievement_ratio = 当前达成比例(SKU维度当前时间常量)
+    pi.achievement_ratio                                     AS current_achievement_ratio,
+    -- 二期口径字段SKU第7节：current_should_achieve_ratio = 当前应达成比例(SKU维度当前时间常量)
+    --    口径：取销售计划表昨日(DATE_SUB(CURRENT_DATE(),1))对应行的cum_plan_qty / order_qty
+    --    与 sp.should_achieve_ratio 同源(销售计划表),昨日无记录时返回 NULL
+    CAST(lcp.cum_plan_qty AS DECIMAL(18,6))
+        / NULLIF(CAST(COALESCE(sp.order_qty, 0) AS DECIMAL(18,6)), 0) AS current_should_achieve_ratio,
     sp.sync_time                                             AS sync_time,
     CURRENT_TIMESTAMP()                                      AS insert_date,
     CURRENT_TIMESTAMP()                                      AS update_date
@@ -4865,7 +4900,9 @@ FROM feishu_dws.dws_sku_sales_plan_180d_d sp
 LEFT JOIN product_info pi   ON sp.style_no_size = pi.style_no_size
 LEFT JOIN current_metrics cm ON sp.style_no_size = cm.style_no_size
 -- 关联按style_no聚合的累计实际销量,用于计算销售比例
-LEFT JOIN sales_ratio_by_style srbs ON sp.style_no = srbs.style_no;
+LEFT JOIN sales_ratio_by_style srbs ON sp.style_no = srbs.style_no
+-- 关联昨日累计计划销量,用于计算current_should_achieve_ratio
+LEFT JOIN latest_cum_plan lcp ON sp.style_no_size = lcp.style_no_size;
 ```
 
 ### feishu\_ads\.ads\_skc\_sales\_plan\_180d\_d
@@ -4892,11 +4929,14 @@ INSERT INTO feishu_ads.ads_skc_sales_plan_180d_d (
     yesterday_actual_qty, yesterday_achievement,
     `7d_achievement`, `30d_achievement`, today_plan_qty,
     order_qty, total_order_qty, achievement_ratio, should_achieve_ratio,
+    current_cum_actual, current_achievement_ratio, current_should_achieve_ratio,
     sync_time, insert_date, update_date
 )
 WITH
--- 1. SKC商品维表补充属性（口径5.3/5.4/5.6节、二期口径字段SKC第2/3节）
+-- 1. SKC商品维表补充属性（口径5.3/5.4/5.6节、二期口径字段SKC第2/3/5节）
 --    新增取 sellable_days_order 和 lifecycle_day(作为current_lifecycle_day)，供ADS层直接使用
+--    二期口径字段SKC第5节：cum_actual作为SKC维度当前时间常量,持久化为current_cum_actual
+--    二期口径字段SKC第5节：achievement_ratio、should_achieve_ratio作为SKC维度当前时间常量,持久化为current_xxx
 product_info_skc AS (
     SELECT
         pi.style_no                                         AS style_no,
@@ -4913,7 +4953,10 @@ product_info_skc AS (
         -- 二期口径字段SKC第3节：SKC可售周期-基于订货数量(从DWS商品维表取,SKC维度当前时间常量)
         pi.sellable_days_order                              AS sellable_days_order,
         -- 二期口径字段SKC第2节：已销售天数(当前时间的lifecycle_day常量,SKC维度当前时间常量)
-        pi.lifecycle_day                                    AS current_lifecycle_day
+        pi.lifecycle_day                                    AS current_lifecycle_day,
+        -- 二期口径字段SKC第5节：SKC累计实际销量(截至N-1天,作为current_cum_actual持久化)
+        -- SKC维度当前时间常量,每天刷新,截至N天与N-1天相同
+        COALESCE(pi.cum_actual, 0)                          AS cum_actual
     FROM feishu_dws.dws_skc_product_info_d pi
 ),
 -- 1.1 SKC累计计划金额辅助：从SKU ADS表按 style_no + sale_date 聚合 SUM(cum_plan_amt)
@@ -4973,6 +5016,18 @@ current_metrics_skc AS (
         )                                                         AS `30d_achievement`
     FROM feishu_dws.dws_skc_sales_plan_180d_d sp
     GROUP BY sp.style_no
+),
+-- 3. 应达成比例辅助：取销售计划表中每个SKC的最新累计计划销量
+--    二期口径字段SKC第5节：current_should_achieve_ratio = 最新cum_plan_qty / order_qty
+--    口径：cum_plan_qty 为截至N-1天的累计计划销量，取昨日(DATE_SUB(CURRENT_DATE(),1))对应行
+--    昨日无记录时（如上架第1天、超周期SKC）取 NULL，应达成比例返回 NULL
+--    与 sp.should_achieve_ratio 同源(销售计划表),保证口径一致
+latest_cum_plan_skc AS (
+    SELECT
+        sp.style_no                                         AS style_no,
+        sp.cum_plan_qty                                     AS cum_plan_qty
+    FROM feishu_dws.dws_skc_sales_plan_180d_d sp
+    WHERE sp.sale_date = DATE_SUB(CURRENT_DATE(), 1)
 )
 SELECT
     sp.style_no                                              AS style_no,
@@ -5050,6 +5105,17 @@ SELECT
     pi.achievement_ratio                                     AS achievement_ratio,
     -- SKC应达成比例：直接取DWS销售计划表的 should_achieve_ratio(基于截至N-1天的cum_plan_qty/order_qty)
     sp.should_achieve_ratio                                  AS should_achieve_ratio,
+    -- 二期口径字段SKC第5节：current_cum_actual = SKC累计实际销量(截至N天,核心4渠道)
+    --    取DWS商品维表cum_actual(SKC维度当前时间常量,每天刷新,同一SKC不同sale_date值相同)
+    --    在当前时间维度下只有N-1的数据,所以截止到N和N-1的数据是一样的
+    pi.cum_actual                                            AS current_cum_actual,
+    -- 二期口径字段SKC第5节：current_achievement_ratio = 当前SKC达成比例(SKC维度当前时间常量)
+    pi.achievement_ratio                                     AS current_achievement_ratio,
+    -- 二期口径字段SKC第5节：current_should_achieve_ratio = 当前SKC应达成比例(SKC维度当前时间常量)
+    --    口径：取销售计划表昨日(DATE_SUB(CURRENT_DATE(),1))对应行的cum_plan_qty / order_qty
+    --    与 sp.should_achieve_ratio 同源(销售计划表),昨日无记录时返回 NULL
+    CAST(lcps.cum_plan_qty AS DECIMAL(18,6))
+        / NULLIF(CAST(COALESCE(sp.order_qty, 0) AS DECIMAL(18,6)), 0) AS current_should_achieve_ratio,
     sp.sync_time                                             AS sync_time,
     CURRENT_TIMESTAMP()                                      AS insert_date,
     CURRENT_TIMESTAMP()                                      AS update_date
@@ -5057,7 +5123,9 @@ FROM feishu_dws.dws_skc_sales_plan_180d_d sp
 LEFT JOIN product_info_skc pi  ON sp.style_no = pi.style_no
 LEFT JOIN current_metrics_skc cm ON sp.style_no = cm.style_no
 -- 关联SKU ADS表聚合的累计计划金额,用于SKC累计计划金额
-LEFT JOIN sku_amt_agg saa ON sp.style_no = saa.style_no AND sp.sale_date = saa.sale_date;
+LEFT JOIN sku_amt_agg saa ON sp.style_no = saa.style_no AND sp.sale_date = saa.sale_date
+-- 关联昨日累计计划销量,用于计算current_should_achieve_ratio
+LEFT JOIN latest_cum_plan_skc lcps ON sp.style_no = lcps.style_no;
 ```
 
 # 5、SQL逻辑
@@ -5132,7 +5200,11 @@ SELECT
     `order_qty`                AS `订货数量`,
     `total_order_qty`          AS `总订货数量`,
     `order_qty_ratio`          AS `订货比例`,
-    `should_achieve_ratio`     AS `应达成比例`
+    `should_achieve_ratio`     AS `应达成比例`,
+    -- 10. 当前时间常量指标(SKU维度当前时间常量,每天刷新,同一SKU不同sale_date值相同)
+    `current_cum_actual`       AS `当前累计实际销量`,
+    `current_achievement_ratio`  AS `当前达成比例`,
+    `current_should_achieve_ratio` AS `当前应达成比例`
 FROM feishu_ads.ads_sku_sales_plan_180d_d;
 ```
 
@@ -5198,7 +5270,11 @@ SELECT
     -- 9. 订货指标
     `order_qty`                AS `SKC订货数量`,
     `total_order_qty`          AS `SKC总订货数量`,
-    `should_achieve_ratio`     AS `SKC应达成比例`
+    `should_achieve_ratio`     AS `SKC应达成比例`,
+    -- 10. 当前时间常量指标(SKC维度当前时间常量,每天刷新,同一SKC不同sale_date值相同)
+    `current_cum_actual`       AS `SKC当前累计实际销量`,
+    `current_achievement_ratio`  AS `SKC当前达成比例`,
+    `current_should_achieve_ratio` AS `SKC当前应达成比例`
 FROM feishu_ads.ads_skc_sales_plan_180d_d;
 ```
 
