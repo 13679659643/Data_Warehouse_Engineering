@@ -454,7 +454,7 @@ CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_product_all_d (
     `shelf_date`          DATE            COMMENT "上架日期（统一口径：韦德取shelf_date，361取actual_shelf_date，空值为null）",
     `first_sales_date`    DATE            COMMENT "首次销售日期（韦德有，361预计算：从销售明细表取最早有销量的日期，空值为null）",
     `first_order_quarter` VARCHAR(50)     COMMENT "首次订货季度",
-    `year`                VARCHAR(50)     COMMENT "年份（韦德有，361为空）",    
+    `year`                VARCHAR(50)     COMMENT "年份（韦德有，361为空）",  
     -- 5. 度量列：库存信息（韦德有详细库存，361为空）
     `inventory_sku`       BIGINT          COMMENT "库存数量(SKU)（韦德有，361为空，整数）",
     -- ============== 新增：韦德特有字段（361置NULL/默认值） ==============
@@ -569,7 +569,7 @@ DROP TABLE IF EXISTS feishu_dwd.dwd_feishu_brand_order_arrival_d;
 CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_brand_order_arrival_d (
     *-- 1. Key 列（PRIMARY KEY 模型，style_no_size 为唯一业务主键）*
     `style_no_size`         VARCHAR(255)    COMMENT "款号与尺码拼接(主键, 形如:ABAV015-7-11.5)",
-    
+  
     *-- 2. 维度列*
     `sku`                    VARCHAR(128)    COMMENT "商品SKU(按主键聚合取MAX值)",
     `style_no`               VARCHAR(255)    COMMENT "款号",
@@ -581,7 +581,7 @@ CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_brand_order_arrival_d (
     `category`               VARCHAR(100)    COMMENT "商品分类",
     `pickup_status`          VARCHAR(50)     COMMENT "提货状态",
     `est_arrival_month`      VARCHAR(50)     COMMENT "预计到货年月(取最早到货时间对应记录)",
-    
+  
     *-- 3. 度量列 (按 style_no_size 聚合叠加)*
     `order_qty`              BIGINT          COMMENT "订货数量(叠加)",
     `picked_qty`             BIGINT          COMMENT "已提货数量(叠加)",
@@ -590,11 +590,11 @@ CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_brand_order_arrival_d (
     `unpicked_avail_qty`     BIGINT          COMMENT "未提可提数量(叠加)",
     `unpicked_unavail_qty`   BIGINT          COMMENT "未提不可提数量(叠加)",
     `cumulative_order_qty`   BIGINT          COMMENT "累计订货(叠加)",
-    
+  
     *-- 4. 日期列*
     `est_arrival_date`       DATE            COMMENT "预计到货时间(取最早的，空值默认CAST NULL AS DATE)",
     `30_est_arrival_date`    DATE            COMMENT "预计到货时间+30天",
-    
+  
     *-- 5. 技术字段*
     `sync_time`              DATETIME        COMMENT "ODS同步时间(取最新时间)",
     `insert_date`            DATETIME        COMMENT "DWD记录插入时间（ETL写入，增量更新用）",
@@ -1237,10 +1237,7 @@ SELECT * FROM  feishu_dwd.dwd_feishu_product_all_d
 
 ### feishu\_dwd\.dwd\_feishu\_inventory\_wdpinpai\_d
 
-
-![image\.png](图片和附件/image.png)
-
-
+![image<span data-type=](图片和附件/image.png)\.png" />
 
 ```SQL
 -- feishu.wd_pinpaikucun  339
@@ -1790,9 +1787,9 @@ UNION ALL
 SELECT
     id,
     COALESCE(NULLIF(TRIM(record_id), ''), 'None'),
-    '361' AS brand,                                    
-    COALESCE(NULLIF(TRIM(SKU), ''), 'None'),           
-    COALESCE(DATE(销售日期), DATE('1970-01-01')),      
+    '361' AS brand,                                  
+    COALESCE(NULLIF(TRIM(SKU), ''), 'None'),         
+    COALESCE(DATE(销售日期), DATE('1970-01-01')),    
     -- 4个渠道销量
     COALESCE(CAST(ROUND(`361sport-销量`, 0) AS BIGINT), 0) AS qty_361sport,
     COALESCE(CAST(ROUND(`中国公司(361°客户)-销量`, 0) AS BIGINT), 0) AS qty_china,
@@ -1805,8 +1802,8 @@ SELECT
     COALESCE(CAST(`员工内购（香港）-金额` AS DECIMAL(18,6)), 0.000000) AS amt_staff_hk,
     COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME)) AS sync_time,
     't_361sales_02'                                    AS source_table,
-    NOW() AS insert_date,                              
-    NOW() AS update_date                               
+    NOW() AS insert_date,                            
+    NOW() AS update_date                             
 FROM feishu.t_361sales_02 
 WHERE record_id IS NOT NULL
 
@@ -1817,9 +1814,9 @@ UNION ALL
 SELECT
     id,
     COALESCE(NULLIF(TRIM(record_id), ''), 'None'),
-    '361' AS brand,                                    
-    COALESCE(NULLIF(TRIM(SKU), ''), 'None'),           
-    COALESCE(DATE(销售日期), DATE('1970-01-01')),      
+    '361' AS brand,                                  
+    COALESCE(NULLIF(TRIM(SKU), ''), 'None'),         
+    COALESCE(DATE(销售日期), DATE('1970-01-01')),    
     -- 4个渠道销量
     COALESCE(CAST(ROUND(`361sport-销量`, 0) AS BIGINT), 0) AS qty_361sport,
     COALESCE(CAST(ROUND(`中国公司(361°客户)-销量`, 0) AS BIGINT), 0) AS qty_china,
@@ -1832,8 +1829,8 @@ SELECT
     COALESCE(CAST(`员工内购（香港）-金额` AS DECIMAL(18,6)), 0.000000) AS amt_staff_hk,
     COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME)) AS sync_time,
     't_361sales_50'                                    AS source_table,
-    NOW() AS insert_date,                              
-    NOW() AS update_date                               
+    NOW() AS insert_date,                            
+    NOW() AS update_date                             
 FROM feishu.t_361sales_50 
 WHERE record_id IS NOT NULL;
 
@@ -1874,18 +1871,18 @@ SELECT
     COALESCE(NULLIF(TRIM(record_id), ''), 'None')                                   AS record_id,
     '韦德'                                                                           AS brand,
     COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                         AS sku,
-    
+  
     -- 日期时间类型 (datetime)：场景一，去除 TRIM 和 NULLIF
     COALESCE(DATE(销售日期), DATE('1970-01-01'))                                    AS sales_date,
-    
+  
     COALESCE(NULLIF(TRIM(款号), ''), 'None')                                        AS style_no,
     COALESCE(NULLIF(TRIM(尺码), ''), 'None')                                        AS size,
-    
+  
     -- 日期时间类型 (datetime)：场景一，去除 TRIM 和 NULLIF
     COALESCE(DATE(首次销售日期), DATE('1970-01-01'))                                AS first_sales_date,
-    
+  
     COALESCE(NULLIF(TRIM(销售周期所属周), ''), 'None')                              AS sales_week,
-    
+  
     -- ================= 销售指标 =================
     -- VARCHAR 转 BIGINT：场景二，先转 DECIMAL 再 ROUND 转 BIGINT，防止源数据带小数报错
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货数量`), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0) AS order_replenish_1,
@@ -1893,16 +1890,16 @@ SELECT
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际总销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)      AS actual_total_qty,
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计销售周期天数), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0) AS est_cycle_days,
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计周销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)      AS est_week_qty,
-    
+  
     -- DECIMAL 转 BIGINT：场景一，直接 ROUND 转 BIGINT，去除 TRIM 和 NULLIF
     COALESCE(CAST(ROUND(`预计销量`, 0) AS BIGINT), 0)                               AS est_qty,
-    
+  
     -- VARCHAR 转 BIGINT：场景二
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际周销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)      AS actual_week_qty,
-    
+  
     -- DECIMAL 转 BIGINT：场景一
     COALESCE(CAST(ROUND(`实际销量`, 0) AS BIGINT), 0)                               AS actual_qty,
-    
+  
     -- ================= 18个渠道销量 =================
     -- DECIMAL 转 BIGINT：场景一，直接 ROUND 转 BIGINT，去除 TRIM 和 NULLIF
     COALESCE(CAST(ROUND(`韦德之道-销量`, 0) AS BIGINT), 0)                          AS qty_wd,
@@ -1923,7 +1920,7 @@ SELECT
     COALESCE(CAST(ROUND(`韦德之道--招待费-销量`, 0) AS BIGINT), 0)                  AS qty_entertainment,
     COALESCE(CAST(ROUND(`韦德德国站-销量`, 0) AS BIGINT), 0)                        AS qty_germany,
     COALESCE(CAST(ROUND(`韦德之道B2B-销量`, 0) AS BIGINT), 0)                       AS qty_b2b,
-    
+  
     -- ================= 18个渠道金额 =================
     -- DECIMAL 转 DECIMAL(18,6)：场景一，直接 CAST 控制精度，去除 TRIM 和 NULLIF
     COALESCE(CAST(`韦德之道-金额` AS DECIMAL(18,6)), 0)                             AS amt_wd,
@@ -1944,20 +1941,20 @@ SELECT
     COALESCE(CAST(`韦德之道--招待费-金额` AS DECIMAL(18,6)), 0)                     AS amt_entertainment,
     COALESCE(CAST(`韦德德国站-金额` AS DECIMAL(18,6)), 0)                           AS amt_germany,
     COALESCE(CAST(`韦德之道B2B-金额` AS DECIMAL(18,6)), 0)                          AS amt_b2b,
-    
+  
     -- ================= 汇总字段 =================
     -- VARCHAR 转 DECIMAL(18,6)：场景二，保留 TRIM 和 NULLIF，直接转 DECIMAL
     COALESCE(CAST(NULLIF(TRIM(`总和`), '') AS DECIMAL(18,6)), 0)                    AS total_sum,
-    
+  
     -- DECIMAL 转 DECIMAL(18,6)：场景一，直接 CAST，去除 TRIM 和 NULLIF
     COALESCE(CAST(`总和 副本` AS DECIMAL(18,6)), 0)                                 AS total_sum_copy,
-    
+  
     -- ================= 系统字段 =================
     -- 日期时间类型 (datetime)：场景一
     COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
     'wd_sales_01'                                                                   AS source_table,
     NOW()                                                                           AS insert_date,
-    NOW()                                                                           AS update_date    
+    NOW()                                                                           AS update_date  
 FROM feishu.wd_sales_01
 WHERE record_id IS NOT NULL;
 
@@ -1990,38 +1987,38 @@ SELECT
     COALESCE(NULLIF(TRIM(record_id), ''), 'None')                                   AS record_id,
     '韦德'                                                                           AS brand,
     COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                         AS sku,
-    
+  
     -- 日期时间类型 (datetime)：场景一，去除 TRIM 和 NULLIF
     COALESCE(DATE(销售日期), DATE('1970-01-01'))                                    AS sales_date,
-    
+  
     COALESCE(NULLIF(TRIM(款号), ''), 'None')                                        AS style_no,
     COALESCE(NULLIF(TRIM(尺码), ''), 'None')                                        AS size,
-    
+  
     -- 日期时间类型 (datetime)：场景一，去除 TRIM 和 NULLIF
     COALESCE(DATE(首次销售日期), DATE('1970-01-01'))                                AS first_sales_date,
-    
+  
     COALESCE(NULLIF(TRIM(销售周期所属周), ''), 'None')                              AS sales_week,
-    
+  
     -- ================= 销售指标 =================
     -- VARCHAR 转 BIGINT：场景二，先转 DECIMAL 再 ROUND 转 BIGINT，防止源数据带小数报错
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货数量`), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0) AS order_replenish_1,
-    
+  
     -- 02表特有逻辑：没有订货数量字段，直接补0
     0                                                                               AS order_replenish,
-    
+  
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际总销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)      AS actual_total_qty,
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计销售周期天数), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0) AS est_cycle_days,
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计周销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)      AS est_week_qty,
-    
+  
     -- DECIMAL 转 BIGINT：场景一，直接 ROUND 转 BIGINT，去除 TRIM 和 NULLIF
     COALESCE(CAST(ROUND(`预计销量`, 0) AS BIGINT), 0)                               AS est_qty,
-    
+  
     -- VARCHAR 转 BIGINT：场景二
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际周销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)      AS actual_week_qty,
-    
+  
     -- DECIMAL 转 BIGINT：场景一
     COALESCE(CAST(ROUND(`实际销量`, 0) AS BIGINT), 0)                               AS actual_qty,
-    
+  
     -- ================= 18个渠道销量 =================
     -- DECIMAL 转 BIGINT：场景一，直接 ROUND 转 BIGINT，去除 TRIM 和 NULLIF
     COALESCE(CAST(ROUND(`韦德之道-销量`, 0) AS BIGINT), 0)                          AS qty_wd,
@@ -2042,7 +2039,7 @@ SELECT
     COALESCE(CAST(ROUND(`韦德之道--招待费-销量`, 0) AS BIGINT), 0)                  AS qty_entertainment,
     COALESCE(CAST(ROUND(`韦德德国站-销量`, 0) AS BIGINT), 0)                        AS qty_germany,
     COALESCE(CAST(ROUND(`韦德之道B2B-销量`, 0) AS BIGINT), 0)                       AS qty_b2b,
-    
+  
     -- ================= 18个渠道金额 =================
     -- DECIMAL 转 DECIMAL(18,6)：场景一，直接 CAST 控制精度，去除 TRIM 和 NULLIF
     COALESCE(CAST(`韦德之道-金额` AS DECIMAL(18,6)), 0)                             AS amt_wd,
@@ -2063,20 +2060,20 @@ SELECT
     COALESCE(CAST(`韦德之道--招待费-金额` AS DECIMAL(18,6)), 0)                     AS amt_entertainment,
     COALESCE(CAST(`韦德德国站-金额` AS DECIMAL(18,6)), 0)                           AS amt_germany,
     COALESCE(CAST(`韦德之道B2B-金额` AS DECIMAL(18,6)), 0)                          AS amt_b2b,
-    
+  
     -- ================= 汇总字段 =================
     -- VARCHAR 转 DECIMAL(18,6)：场景二，保留 TRIM 和 NULLIF，直接转 DECIMAL
     COALESCE(CAST(NULLIF(TRIM(`总和`), '') AS DECIMAL(18,6)), 0)                    AS total_sum,
-    
+  
     -- DECIMAL 转 DECIMAL(18,6)：场景一，直接 CAST，去除 TRIM 和 NULLIF
     COALESCE(CAST(`总和 副本` AS DECIMAL(18,6)), 0)                                 AS total_sum_copy,
-    
+  
     -- ================= 系统字段 =================
     -- 日期时间类型 (datetime)：场景一
     COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
     'wd_sales_02'                                                                   AS source_table,
     NOW()                                                                           AS insert_date,
-    NOW()                                                                           AS update_date    
+    NOW()                                                                           AS update_date  
 FROM feishu.wd_sales_02
 WHERE record_id IS NOT NULL;
 
@@ -2109,39 +2106,39 @@ SELECT
     COALESCE(NULLIF(TRIM(record_id), ''), 'None')                                   AS record_id,
     '韦德'                                                                           AS brand,
     COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                         AS sku,
-    
+  
     -- 日期时间类型 (datetime)：场景一，去除 TRIM 和 NULLIF
     COALESCE(DATE(销售日期), DATE('1970-01-01'))                                    AS sales_date,
-    
+  
     COALESCE(NULLIF(TRIM(款号), ''), 'None')                                        AS style_no,
     COALESCE(NULLIF(TRIM(尺码), ''), 'None')                                        AS size,
-    
+  
     -- 日期时间类型 (datetime)：场景一，去除 TRIM 和 NULLIF
     COALESCE(DATE(首次销售日期), DATE('1970-01-01'))                                AS first_sales_date,
-    
+  
     COALESCE(NULLIF(TRIM(销售周期所属周), ''), 'None')                              AS sales_week,
-    
+  
     -- ================= 销售指标 =================
     -- 03表特有逻辑：只有"订货+补货"字段，映射到 order_replenish_1
     -- VARCHAR 转 BIGINT：场景二，先转 DECIMAL 再 ROUND 转 BIGINT，防止源数据带小数报错
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货`), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0) AS order_replenish_1,
-    
+  
     -- 03表特有逻辑：没有订货数量字段，直接补0
     0                                                                               AS order_replenish,
-    
+  
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际总销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)      AS actual_total_qty,
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计销售周期天数), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0) AS est_cycle_days,
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计周销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)      AS est_week_qty,
-    
+  
     -- DECIMAL 转 BIGINT：场景一，直接 ROUND 转 BIGINT，去除 TRIM 和 NULLIF
     COALESCE(CAST(ROUND(`预计销量`, 0) AS BIGINT), 0)                               AS est_qty,
-    
+  
     -- VARCHAR 转 BIGINT：场景二
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际周销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)      AS actual_week_qty,
-    
+  
     -- DECIMAL 转 BIGINT：场景一
     COALESCE(CAST(ROUND(`实际销量`, 0) AS BIGINT), 0)                               AS actual_qty,
-    
+  
     -- ================= 18个渠道销量 =================
     -- DECIMAL 转 BIGINT：场景一，直接 ROUND 转 BIGINT，去除 TRIM 和 NULLIF
     COALESCE(CAST(ROUND(`韦德之道-销量`, 0) AS BIGINT), 0)                          AS qty_wd,
@@ -2162,7 +2159,7 @@ SELECT
     COALESCE(CAST(ROUND(`韦德之道--招待费-销量`, 0) AS BIGINT), 0)                  AS qty_entertainment,
     COALESCE(CAST(ROUND(`韦德德国站-销量`, 0) AS BIGINT), 0)                        AS qty_germany,
     COALESCE(CAST(ROUND(`韦德之道B2B-销量`, 0) AS BIGINT), 0)                       AS qty_b2b,
-    
+  
     -- ================= 18个渠道金额 =================
     -- DECIMAL 转 DECIMAL(18,6)：场景一，直接 CAST 控制精度，去除 TRIM 和 NULLIF
     COALESCE(CAST(`韦德之道-金额` AS DECIMAL(18,6)), 0)                             AS amt_wd,
@@ -2183,20 +2180,20 @@ SELECT
     COALESCE(CAST(`韦德之道--招待费-金额` AS DECIMAL(18,6)), 0)                     AS amt_entertainment,
     COALESCE(CAST(`韦德德国站-金额` AS DECIMAL(18,6)), 0)                           AS amt_germany,
     COALESCE(CAST(`韦德之道B2B-金额` AS DECIMAL(18,6)), 0)                          AS amt_b2b,
-    
+  
     -- ================= 汇总字段 =================
     -- VARCHAR 转 DECIMAL(18,6)：场景二，保留 TRIM 和 NULLIF，直接转 DECIMAL
     COALESCE(CAST(NULLIF(TRIM(`总和`), '') AS DECIMAL(18,6)), 0)                    AS total_sum,
-    
+  
     -- DECIMAL 转 DECIMAL(18,6)：场景一，直接 CAST，去除 TRIM 和 NULLIF
     COALESCE(CAST(`总和 副本` AS DECIMAL(18,6)), 0)                                 AS total_sum_copy,
-    
+  
     -- ================= 系统字段 =================
     -- 日期时间类型 (datetime)：场景一
     COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
     'wd_sales_03'                                                                   AS source_table,
     NOW()                                                                           AS insert_date,
-    NOW()                                                                           AS update_date    
+    NOW()                                                                           AS update_date  
 FROM feishu.wd_sales_03
 WHERE record_id IS NOT NULL;
 
@@ -2229,40 +2226,40 @@ SELECT
     COALESCE(NULLIF(TRIM(record_id), ''), 'None')                                   AS record_id,
     '韦德'                                                                           AS brand,
     COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                         AS sku,
-    
+  
     -- 日期时间类型 (datetime)：场景一，去除 TRIM 和 NULLIF
     COALESCE(DATE(销售日期), DATE('1970-01-01'))                                    AS sales_date,
-    
+  
     COALESCE(NULLIF(TRIM(款号), ''), 'None')                                        AS style_no,
     COALESCE(NULLIF(TRIM(尺码), ''), 'None')                                        AS size,
-    
+  
     -- 日期时间类型 (datetime)：场景一，去除 TRIM 和 NULLIF
     COALESCE(DATE(首次销售日期), DATE('1970-01-01'))                                AS first_sales_date,
-    
+  
     -- 04表特有逻辑：源表去掉了"销售周期所属周"字段，直接补 'None' 防止 Column not found 报错
     'None'                                                                          AS sales_week,
-    
+  
     -- ================= 销售指标 =================
     -- 04表特有逻辑：只有"订货+补货"字段，映射到 order_replenish_1
     -- VARCHAR 转 BIGINT：场景二，先转 DECIMAL 再 ROUND 转 BIGINT，防止源数据带小数报错
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货`), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0) AS order_replenish_1,
-    
+  
     -- 04表特有逻辑：没有订货数量字段，直接补0
     0                                                                               AS order_replenish,
-    
+  
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际总销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)      AS actual_total_qty,
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计销售周期天数), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0) AS est_cycle_days,
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计周销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)      AS est_week_qty,
-    
+  
     -- DECIMAL 转 BIGINT：场景一，直接 ROUND 转 BIGINT，去除 TRIM 和 NULLIF
     COALESCE(CAST(ROUND(`预计销量`, 0) AS BIGINT), 0)                               AS est_qty,
-    
+  
     -- VARCHAR 转 BIGINT：场景二
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际周销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)      AS actual_week_qty,
-    
+  
     -- DECIMAL 转 BIGINT：场景一
     COALESCE(CAST(ROUND(`实际销量`, 0) AS BIGINT), 0)                               AS actual_qty,
-    
+  
     -- ================= 18个渠道销量 =================
     -- DECIMAL 转 BIGINT：场景一，直接 ROUND 转 BIGINT，去除 TRIM 和 NULLIF
     COALESCE(CAST(ROUND(`韦德之道-销量`, 0) AS BIGINT), 0)                          AS qty_wd,
@@ -2283,7 +2280,7 @@ SELECT
     COALESCE(CAST(ROUND(`韦德之道--招待费-销量`, 0) AS BIGINT), 0)                  AS qty_entertainment,
     COALESCE(CAST(ROUND(`韦德德国站-销量`, 0) AS BIGINT), 0)                        AS qty_germany,
     COALESCE(CAST(ROUND(`韦德之道B2B-销量`, 0) AS BIGINT), 0)                       AS qty_b2b,
-    
+  
     -- ================= 18个渠道金额 =================
     -- DECIMAL 转 DECIMAL(18,6)：场景一，直接 CAST 控制精度，去除 TRIM 和 NULLIF
     COALESCE(CAST(`韦德之道-金额` AS DECIMAL(18,6)), 0)                             AS amt_wd,
@@ -2304,20 +2301,20 @@ SELECT
     COALESCE(CAST(`韦德之道--招待费-金额` AS DECIMAL(18,6)), 0)                     AS amt_entertainment,
     COALESCE(CAST(`韦德德国站-金额` AS DECIMAL(18,6)), 0)                           AS amt_germany,
     COALESCE(CAST(`韦德之道B2B-金额` AS DECIMAL(18,6)), 0)                          AS amt_b2b,
-    
+  
     -- ================= 汇总字段 =================
     -- VARCHAR 转 DECIMAL(18,6)：场景二，保留 TRIM 和 NULLIF，直接转 DECIMAL
     COALESCE(CAST(NULLIF(TRIM(`总和`), '') AS DECIMAL(18,6)), 0)                    AS total_sum,
-    
+  
     -- DECIMAL 转 DECIMAL(18,6)：场景一，直接 CAST，去除 TRIM 和 NULLIF
     COALESCE(CAST(`总和 副本` AS DECIMAL(18,6)), 0)                                 AS total_sum_copy,
-    
+  
     -- ================= 系统字段 =================
     -- 日期时间类型 (datetime)：场景一
     COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
     'wd_sales_04'                                                                   AS source_table,
     NOW()                                                                           AS insert_date,
-    NOW()                                                                           AS update_date    
+    NOW()                                                                           AS update_date  
 FROM feishu.wd_sales_04
 WHERE record_id IS NOT NULL;
 
@@ -2350,37 +2347,37 @@ SELECT
     COALESCE(NULLIF(TRIM(record_id), ''), 'None')                                   AS record_id,
     '韦德'                                                                           AS brand,
     COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                         AS sku,
-    
+  
     -- 日期时间类型 (datetime)：场景一，去除 TRIM 和 NULLIF
     COALESCE(DATE(销售日期), DATE('1970-01-01'))                                    AS sales_date,
-    
+  
     COALESCE(NULLIF(TRIM(款号), ''), 'None')                                        AS style_no,
     COALESCE(NULLIF(TRIM(尺码), ''), 'None')                                        AS size,
-    
+  
     -- 日期时间类型 (datetime)：场景一，去除 TRIM 和 NULLIF
     COALESCE(DATE(首次销售日期), DATE('1970-01-01'))                                AS first_sales_date,
-    
+  
     COALESCE(NULLIF(TRIM(销售周期所属周), ''), 'None')                              AS sales_week,
-    
+  
     -- ================= 销售指标 =================
     -- 05表特有逻辑：包含"订货+补货1"和"订货+补货"两个字段
     -- VARCHAR 转 BIGINT：场景二，先转 DECIMAL 再 ROUND 转 BIGINT，防止源数据带小数报错
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货1`), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0) AS order_replenish_1,
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货`), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)  AS order_replenish,
-    
+  
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际总销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)      AS actual_total_qty,
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计销售周期天数), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0) AS est_cycle_days,
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计周销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)      AS est_week_qty,
-    
+  
     -- DECIMAL 转 BIGINT：场景一，直接 ROUND 转 BIGINT，去除 TRIM 和 NULLIF
     COALESCE(CAST(ROUND(`预计销量`, 0) AS BIGINT), 0)                               AS est_qty,
-    
+  
     -- VARCHAR 转 BIGINT：场景二
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际周销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)      AS actual_week_qty,
-    
+  
     -- DECIMAL 转 BIGINT：场景一
     COALESCE(CAST(ROUND(`实际销量`, 0) AS BIGINT), 0)                               AS actual_qty,
-    
+  
     -- ================= 18个渠道销量 =================
     -- DECIMAL 转 BIGINT：场景一，直接 ROUND 转 BIGINT，去除 TRIM 和 NULLIF
     COALESCE(CAST(ROUND(`韦德之道-销量`, 0) AS BIGINT), 0)                          AS qty_wd,
@@ -2401,7 +2398,7 @@ SELECT
     COALESCE(CAST(ROUND(`韦德之道--招待费-销量`, 0) AS BIGINT), 0)                  AS qty_entertainment,
     COALESCE(CAST(ROUND(`韦德德国站-销量`, 0) AS BIGINT), 0)                        AS qty_germany,
     COALESCE(CAST(ROUND(`韦德之道B2B-销量`, 0) AS BIGINT), 0)                       AS qty_b2b,
-    
+  
     -- ================= 18个渠道金额 =================
     -- DECIMAL 转 DECIMAL(18,6)：场景一，直接 CAST 控制精度，去除 TRIM 和 NULLIF
     COALESCE(CAST(`韦德之道-金额` AS DECIMAL(18,6)), 0)                             AS amt_wd,
@@ -2422,20 +2419,20 @@ SELECT
     COALESCE(CAST(`韦德之道--招待费-金额` AS DECIMAL(18,6)), 0)                     AS amt_entertainment,
     COALESCE(CAST(`韦德德国站-金额` AS DECIMAL(18,6)), 0)                           AS amt_germany,
     COALESCE(CAST(`韦德之道B2B-金额` AS DECIMAL(18,6)), 0)                          AS amt_b2b,
-    
+  
     -- ================= 汇总字段 =================
     -- VARCHAR 转 DECIMAL(18,6)：场景二，保留 TRIM 和 NULLIF，直接转 DECIMAL
     COALESCE(CAST(NULLIF(TRIM(`总和`), '') AS DECIMAL(18,6)), 0)                    AS total_sum,
-    
+  
     -- DECIMAL 转 DECIMAL(18,6)：场景一，直接 CAST，去除 TRIM 和 NULLIF
     COALESCE(CAST(`总和 副本` AS DECIMAL(18,6)), 0)                                 AS total_sum_copy,
-    
+  
     -- ================= 系统字段 =================
     -- 日期时间类型 (datetime)：场景一
     COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
     'wd_sales_05'                                                                   AS source_table,
     NOW()                                                                           AS insert_date,
-    NOW()                                                                           AS update_date    
+    NOW()                                                                           AS update_date  
 FROM feishu.wd_sales_05
 WHERE record_id IS NOT NULL;
 
@@ -2468,37 +2465,37 @@ SELECT
     COALESCE(NULLIF(TRIM(record_id), ''), 'None')                                   AS record_id,
     '韦德'                                                                           AS brand,
     COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                         AS sku,
-    
+  
     -- 日期时间类型 (datetime)：场景一，去除 TRIM 和 NULLIF
     COALESCE(DATE(销售日期), DATE('1970-01-01'))                                    AS sales_date,
-    
+  
     COALESCE(NULLIF(TRIM(款号), ''), 'None')                                        AS style_no,
     COALESCE(NULLIF(TRIM(尺码), ''), 'None')                                        AS size,
-    
+  
     -- 日期时间类型 (datetime)：场景一，去除 TRIM 和 NULLIF
     COALESCE(DATE(首次销售日期), DATE('1970-01-01'))                                AS first_sales_date,
-    
+  
     COALESCE(NULLIF(TRIM(销售周期所属周), ''), 'None')                              AS sales_week,
-    
+  
     -- ================= 销售指标 =================
     -- 05表特有逻辑：包含"订货+补货1"和"订货+补货"两个字段
     -- VARCHAR 转 BIGINT：场景二，先转 DECIMAL 再 ROUND 转 BIGINT，防止源数据带小数报错
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货1`), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0) AS order_replenish_1,
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货`), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)  AS order_replenish,
-    
+  
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际总销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)      AS actual_total_qty,
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计销售周期天数), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0) AS est_cycle_days,
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计周销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)      AS est_week_qty,
-    
+  
     -- DECIMAL 转 BIGINT：场景一，直接 ROUND 转 BIGINT，去除 TRIM 和 NULLIF
     COALESCE(CAST(ROUND(`预计销量`, 0) AS BIGINT), 0)                               AS est_qty,
-    
+  
     -- VARCHAR 转 BIGINT：场景二
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际周销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)      AS actual_week_qty,
-    
+  
     -- DECIMAL 转 BIGINT：场景一
     COALESCE(CAST(ROUND(`实际销量`, 0) AS BIGINT), 0)                               AS actual_qty,
-    
+  
     -- ================= 18个渠道销量 =================
     -- DECIMAL 转 BIGINT：场景一，直接 ROUND 转 BIGINT，去除 TRIM 和 NULLIF
     COALESCE(CAST(ROUND(`韦德之道-销量`, 0) AS BIGINT), 0)                          AS qty_wd,
@@ -2519,7 +2516,7 @@ SELECT
     COALESCE(CAST(ROUND(`韦德之道--招待费-销量`, 0) AS BIGINT), 0)                  AS qty_entertainment,
     COALESCE(CAST(ROUND(`韦德德国站-销量`, 0) AS BIGINT), 0)                        AS qty_germany,
     COALESCE(CAST(ROUND(`韦德之道B2B-销量`, 0) AS BIGINT), 0)                       AS qty_b2b,
-    
+  
     -- ================= 18个渠道金额 =================
     -- DECIMAL 转 DECIMAL(18,6)：场景一，直接 CAST 控制精度，去除 TRIM 和 NULLIF
     COALESCE(CAST(`韦德之道-金额` AS DECIMAL(18,6)), 0)                             AS amt_wd,
@@ -2540,20 +2537,20 @@ SELECT
     COALESCE(CAST(`韦德之道--招待费-金额` AS DECIMAL(18,6)), 0)                     AS amt_entertainment,
     COALESCE(CAST(`韦德德国站-金额` AS DECIMAL(18,6)), 0)                           AS amt_germany,
     COALESCE(CAST(`韦德之道B2B-金额` AS DECIMAL(18,6)), 0)                          AS amt_b2b,
-    
+  
     -- ================= 汇总字段 =================
     -- VARCHAR 转 DECIMAL(18,6)：场景二，保留 TRIM 和 NULLIF，直接转 DECIMAL
     COALESCE(CAST(NULLIF(TRIM(`总和`), '') AS DECIMAL(18,6)), 0)                    AS total_sum,
-    
+  
     -- DECIMAL 转 DECIMAL(18,6)：场景一，直接 CAST，去除 TRIM 和 NULLIF
     COALESCE(CAST(`总和 副本` AS DECIMAL(18,6)), 0)                                 AS total_sum_copy,
-    
+  
     -- ================= 系统字段 =================
     -- 日期时间类型 (datetime)：场景一
     COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
     'wd_sales_06'                                                                   AS source_table,
     NOW()                                                                           AS insert_date,
-    NOW()                                                                           AS update_date    
+    NOW()                                                                           AS update_date  
 FROM feishu.wd_sales_06
 WHERE record_id IS NOT NULL;
 
@@ -2582,18 +2579,18 @@ SELECT
     COALESCE(NULLIF(TRIM(record_id), ''), 'None')                                   AS record_id,
     '韦德'                                                                           AS brand,
     COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                         AS sku,
-    
+  
     -- 日期时间类型 (datetime)：场景一，去除 TRIM 和 NULLIF
     COALESCE(DATE(销售日期), DATE('1970-01-01'))                                    AS sales_date,
-    
+  
     COALESCE(NULLIF(TRIM(款号), ''), 'None')                                        AS style_no,
     COALESCE(NULLIF(TRIM(尺码), ''), 'None')                                        AS size,
-    
+  
     -- 日期时间类型 (datetime)：场景一，去除 TRIM 和 NULLIF
     COALESCE(DATE(首次销售日期), DATE('1970-01-01'))                                AS first_sales_date,
-    
+  
     COALESCE(NULLIF(TRIM(销售周期所属周), ''), 'None')                              AS sales_week,
-    
+  
     -- ================= 销售指标 =================
     -- 23分表缺少的销售指标字段补0（7个缺失指标）
     0                                                                               AS order_replenish_1,
@@ -2603,10 +2600,10 @@ SELECT
     0                                                                               AS est_week_qty,
     0                                                                               AS est_qty,
     0                                                                               AS actual_week_qty,
-    
+  
     -- 23分表"实际销量"为 varchar，需 CAST：场景二，先转 DECIMAL 再 ROUND 转 BIGINT，防止源数据带小数报错
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0) AS actual_qty,
-    
+  
     -- ================= 18个渠道销量 =================
     -- 18个渠道销量（23分表有，与06一致），物理类型为 decimal：场景一，直接 ROUND 转 BIGINT，去除 TRIM 和 NULLIF
     COALESCE(CAST(ROUND(`韦德之道-销量`, 0) AS BIGINT), 0)                          AS qty_wd,
@@ -2627,7 +2624,7 @@ SELECT
     COALESCE(CAST(ROUND(`韦德之道--招待费-销量`, 0) AS BIGINT), 0)                  AS qty_entertainment,
     COALESCE(CAST(ROUND(`韦德德国站-销量`, 0) AS BIGINT), 0)                        AS qty_germany,
     COALESCE(CAST(ROUND(`韦德之道B2B-销量`, 0) AS BIGINT), 0)                       AS qty_b2b,
-    
+  
     -- ================= 18个渠道金额 =================
     -- 18个渠道金额，物理类型为 decimal：场景一，直接 CAST 控制精度，去除 TRIM 和 NULLIF
     COALESCE(CAST(`韦德之道-金额` AS DECIMAL(18,6)), 0)                             AS amt_wd,
@@ -2648,22 +2645,22 @@ SELECT
     COALESCE(CAST(`韦德之道--招待费-金额` AS DECIMAL(18,6)), 0)                     AS amt_entertainment,
     COALESCE(CAST(`韦德德国站-金额` AS DECIMAL(18,6)), 0)                           AS amt_germany,
     COALESCE(CAST(`韦德之道B2B-金额` AS DECIMAL(18,6)), 0)                          AS amt_b2b,
-    
+  
     -- ================= 汇总字段 =================
     -- 汇总字段（23有"总和"无"总和副本"）
     -- "总和" 为 varchar：场景二，保留 TRIM 和 NULLIF，直接转 DECIMAL
     COALESCE(CAST(NULLIF(TRIM(`总和`), '') AS DECIMAL(18,6)), 0)                    AS total_sum,
-    
+  
     -- 缺失"总和副本"，直接补0
     0                                                                               AS total_sum_copy,
-    
+  
     -- ================= 系统字段 =================
     -- 日期时间类型 (datetime)：场景一
     COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
     'wd_sales_23'                                                                   AS source_table,
     NOW()                                                                           AS insert_date,
     NOW()                                                                           AS update_date
-    
+  
 FROM feishu.wd_sales_23
 WHERE record_id IS NOT NULL;
 
@@ -2692,18 +2689,18 @@ SELECT
     COALESCE(NULLIF(TRIM(record_id), ''), 'None')                                   AS record_id,
     '韦德'                                                                           AS brand,
     COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                         AS sku,
-    
+  
     -- 日期时间类型 (datetime)：场景一，去除 TRIM 和 NULLIF
     COALESCE(DATE(销售日期), DATE('1970-01-01'))                                    AS sales_date,
-    
+  
     -- 款号/尺码缺失补 'None'
     'None'                                                                          AS style_no,
     'None'                                                                          AS size,
-    
+  
     -- 首次销售日期/销售周期缺失补默认值
     DATE('1970-01-01')                                                              AS first_sales_date,
     'None'                                                                          AS sales_week,
-    
+  
     -- ================= 销售指标 =================
     -- 8个销售指标全缺失补 0
     0                                                                               AS order_replenish_1,
@@ -2714,7 +2711,7 @@ SELECT
     0                                                                               AS est_qty,
     0                                                                               AS actual_week_qty,
     0                                                                               AS actual_qty,
-    
+  
     -- ================= 18个渠道销量 =================
     -- 18个渠道销量（30/50有，与06一致），物理类型为 decimal：场景一，直接 ROUND 转 BIGINT，去除 TRIM 和 NULLIF
     COALESCE(CAST(ROUND(`韦德之道-销量`, 0) AS BIGINT), 0)                          AS qty_wd,
@@ -2735,7 +2732,7 @@ SELECT
     COALESCE(CAST(ROUND(`韦德之道--招待费-销量`, 0) AS BIGINT), 0)                  AS qty_entertainment,
     COALESCE(CAST(ROUND(`韦德德国站-销量`, 0) AS BIGINT), 0)                        AS qty_germany,
     COALESCE(CAST(ROUND(`韦德之道B2B-销量`, 0) AS BIGINT), 0)                       AS qty_b2b,
-    
+  
     -- ================= 18个渠道金额 =================
     -- 18个渠道金额，物理类型为 decimal：场景一，直接 CAST 控制精度，去除 TRIM 和 NULLIF
     COALESCE(CAST(`韦德之道-金额` AS DECIMAL(18,6)), 0)                             AS amt_wd,
@@ -2756,12 +2753,12 @@ SELECT
     COALESCE(CAST(`韦德之道--招待费-金额` AS DECIMAL(18,6)), 0)                     AS amt_entertainment,
     COALESCE(CAST(`韦德德国站-金额` AS DECIMAL(18,6)), 0)                           AS amt_germany,
     COALESCE(CAST(`韦德之道B2B-金额` AS DECIMAL(18,6)), 0)                          AS amt_b2b,
-    
+  
     -- ================= 汇总字段 =================
     -- 汇总字段补 0（30/50无）
     0                                                                               AS total_sum,
     0                                                                               AS total_sum_copy,
-    
+  
     -- ================= 系统字段 =================
     -- 日期时间类型 (datetime)：场景一
     COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
@@ -2881,7 +2878,7 @@ WHERE record_id IS NOT NULL;
       COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
       'wd_sales_01'                                                                   AS source_table,
       NOW()                                                                           AS insert_date,
-      NOW()                                                                           AS update_date    
+      NOW()                                                                           AS update_date  
   FROM feishu.wd_sales_01
   WHERE record_id IS NOT NULL;
 ```
@@ -3080,7 +3077,7 @@ INSERT INTO feishu_dwd.dwd_feishu_product_wd_d (
 SELECT
     -- 1. Key 列 (优先取 SKU，为空则取 SKU1)
     COALESCE(NULLIF(TRIM(SKU), ''), NULLIF(TRIM(SKU1), ''))                 AS sku,
-    
+  
     -- 2. 维度列：商品主数据与归类 (均为 varchar，保留清洗逻辑)
     COALESCE(NULLIF(TRIM(款号), ''), 'None')                                 AS style_no,
     COALESCE(NULLIF(TRIM(IP), ''), 'None')                                   AS ip,
@@ -3093,17 +3090,17 @@ SELECT
     COALESCE(NULLIF(TRIM(系统货号1), ''), 'None')                            AS system_item_no,
     COALESCE(NULLIF(TRIM(最小颗粒度), ''), 'None')                           AS min_granularity,
     COALESCE(NULLIF(TRIM(订货唯一值), ''), 'None')                           AS order_unique_value,
-    
+  
     -- 3. 度量列：价格信息
     COALESCE(CAST(吊牌价 AS DECIMAL(38,6)), 0)                               AS tag_price,       -- 【修改】ODS为decimal，去掉TRIM/NULLIF
     COALESCE(CAST(折扣 AS DECIMAL(38,6)), 0)                                 AS discount,        -- 【修改】ODS为decimal，去掉TRIM/NULLIF
     COALESCE(CAST(NULLIF(TRIM(回款价), '') AS DECIMAL(38,6)), 0)             AS payment_price,   -- ODS为varchar，保留
     COALESCE(CAST(NULLIF(TRIM(`实际销售价（$）`), '') AS DECIMAL(38,6)), 0)  AS actual_sales_price, -- ODS为varchar，保留
-    
+  
     -- 4. 度量列：订货信息（ODS为varchar，保留正则校验过滤非数字字符）
     COALESCE(CASE WHEN TRIM(`订货数量(sku)`) REGEXP '^[0-9]+$' THEN CAST(TRIM(`订货数量(sku)`) AS BIGINT) ELSE 0 END, 0) AS order_qty_sku,
     COALESCE(CASE WHEN TRIM(`订货数量(SKC)`) REGEXP '^[0-9]+$' THEN CAST(TRIM(`订货数量(SKC)`) AS BIGINT) ELSE 0 END, 0) AS order_qty_skc,
-    
+  
     -- 5. 维度列：时间信息与状态
     COALESCE(DATE(订货日期), DATE('1970-01-01'))                             AS order_date,      -- 【修改】ODS为datetime，去掉TRIM/NULLIF
     COALESCE(DATE(预计到货日期), DATE('1970-01-01'))                         AS est_arrival_date,-- 【修改】ODS为datetime，去掉TRIM/NULLIF
@@ -3120,7 +3117,7 @@ SELECT
     COALESCE(NULLIF(TRIM(年份), ''), 'None')                                 AS year,
     COALESCE(NULLIF(TRIM(销售周期标签), ''), 'None')                         AS sales_cycle_label,
     COALESCE(NULLIF(TRIM(是否确认过), ''), 'None')                           AS is_confirmed,
-    
+  
     -- 6. 度量列：库存信息（ODS均为varchar，保留正则校验过滤非数字字符）
     COALESCE(CASE WHEN TRIM(`库存数量(SKU)`) REGEXP '^[0-9]+$' THEN CAST(TRIM(`库存数量(SKU)`) AS BIGINT) ELSE 0 END, 0) AS inventory_sku,
     COALESCE(CASE WHEN TRIM(`库存数量(SKC)`) REGEXP '^[0-9]+$' THEN CAST(TRIM(`库存数量(SKC)`) AS BIGINT) ELSE 0 END, 0) AS inventory_skc,
@@ -3128,18 +3125,18 @@ SELECT
     COALESCE(CASE WHEN TRIM(杭州库存) REGEXP '^[0-9]+$' THEN CAST(TRIM(杭州库存) AS BIGINT) ELSE 0 END, 0) AS inventory_hz,
     COALESCE(CASE WHEN TRIM(保税库存) REGEXP '^[0-9]+$' THEN CAST(TRIM(保税库存) AS BIGINT) ELSE 0 END, 0) AS inventory_baoshui,
     COALESCE(CASE WHEN TRIM(非保库存) REGEXP '^[0-9]+$' THEN CAST(TRIM(非保库存) AS BIGINT) ELSE 0 END, 0) AS inventory_feibao,
-    
+  
     -- 7. 度量列：销售指标
     COALESCE(NULLIF(TRIM(评级), ''), 'None')                                 AS rating,
     -- 【修改】销售周期天数 ODS为decimal，原正则转BIGINT改为 ROUND后转BIGINT，防止小数截断报错
     COALESCE(CAST(ROUND(销售周期天数, 0) AS BIGINT), 0)                      AS sales_cycle_days,
-    
+  
     -- 销售目标 ODS为varchar，保留
     COALESCE(CAST(NULLIF(TRIM(`销售目标（日）`), '') AS DECIMAL(38,6)), 0)   AS daily_target,
     COALESCE(CAST(NULLIF(TRIM(`销售目标（周）`), '') AS DECIMAL(38,6)), 0)   AS weekly_target,
     COALESCE(CAST(NULLIF(TRIM(`销售目标（月）`), '') AS DECIMAL(38,6)), 0)   AS monthly_target,
     COALESCE(CAST(NULLIF(TRIM(`销售目标（季）`), '') AS DECIMAL(38,6)), 0)   AS quarterly_target,
-    
+  
     -- 销量与累积 ODS为varchar，保留正则校验
     COALESCE(CASE WHEN TRIM(官网当日销售) REGEXP '^[0-9]+$' THEN CAST(TRIM(官网当日销售) AS BIGINT) ELSE 0 END, 0) AS official_daily_sales,
     COALESCE(CASE WHEN TRIM(`销售累积数量(不含本周）`) REGEXP '^[0-9]+$' THEN CAST(TRIM(`销售累积数量(不含本周）`) AS BIGINT) ELSE 0 END, 0) AS cum_sales_excl_current_week,
@@ -3148,22 +3145,22 @@ SELECT
     COALESCE(CAST(NULLIF(TRIM(SKC达成率), '') AS DECIMAL(38,6)), 0)          AS skc_achievement,
     COALESCE(CASE WHEN TRIM(实际售卖天数) REGEXP '^[0-9]+$' THEN CAST(TRIM(实际售卖天数) AS BIGINT) ELSE 0 END, 0) AS actual_sales_days,
     COALESCE(CAST(NULLIF(TRIM(实际日均销量), '') AS DECIMAL(38,6)), 0)       AS actual_daily_avg,
-    
+  
     -- 8. 度量列：补货预警
     -- 补货量/数量 ODS为varchar，保留正则校验
     COALESCE(CASE WHEN TRIM(补货量) REGEXP '^[0-9]+$' THEN CAST(TRIM(补货量) AS BIGINT) ELSE 0 END, 0) AS replenish_qty,
     COALESCE(CASE WHEN TRIM(补货数量) REGEXP '^[0-9]+$' THEN CAST(TRIM(补货数量) AS BIGINT) ELSE 0 END, 0) AS replenish_num,
-    
+  
     COALESCE(NULLIF(TRIM(补货修正), ''), 'None')                             AS replenish_correction,
     -- 差异/周转天数 ODS为varchar，保留
     COALESCE(CAST(NULLIF(TRIM(差异), '') AS DECIMAL(38,6)), 0)               AS variance,
     COALESCE(CAST(NULLIF(TRIM(周转天数), '') AS DECIMAL(38,6)), 0)           AS turnover_days,
-    
+  
     COALESCE(CASE WHEN TRIM(安全天数) REGEXP '^[0-9]+$' THEN CAST(TRIM(安全天数) AS BIGINT) ELSE 0 END, 0) AS safety_days,
     COALESCE(NULLIF(TRIM(预警), ''), 'None')                                 AS warning_status,
     COALESCE(NULLIF(TRIM(是否有补货标记), ''), 'None')                       AS has_replenish_mark,
     COALESCE(NULLIF(TRIM(是否补货), ''), 'None')                             AS is_replenish,
-    
+  
     -- 9. 技术字段
     COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))             AS sync_time,
     NOW()                                                                    AS insert_date,
@@ -3196,10 +3193,10 @@ SELECT
     COALESCE(NULLIF(TRIM(品类), ''), 'None')                                AS category,
     COALESCE(NULLIF(TRIM(美码), ''), 'None')                                AS size_us,
     COALESCE(NULLIF(TRIM(规格编码), ''), 'None')                            AS size_code,
-    
+  
     -- 2. 度量 (ODS为DECIMAL，去掉TRIM，直接CAST)
     COALESCE(CAST(吊牌价 AS DECIMAL(18,6)), 0)                              AS tag_price,                       -- 金额保留6位小数
-    
+  
     -- 3. 订货信息
     -- ODS为DATETIME，去掉TRIM，直接CAST为DATE
     COALESCE(CAST(订货日期 AS DATE), '1970-01-01')                          AS order_date,
@@ -3207,7 +3204,7 @@ SELECT
     COALESCE(CAST(NULLIF(TRIM(订货数量), '') AS BIGINT), 0)                 AS order_qty,
     COALESCE(NULLIF(TRIM(是否订过货), ''), 'None')                          AS is_ordered,
     COALESCE(NULLIF(TRIM(下单方式), ''), 'None')                            AS order_method,
-    
+  
     -- 4. 到货信息
     COALESCE(NULLIF(TRIM(预计到货月份), ''), 'None')                        AS est_arrival_month,
     -- ODS为DATETIME，去掉TRIM 20260713 预计到货日期 -->预计到货时间
@@ -3224,7 +3221,7 @@ SELECT
     COALESCE(NULLIF(TRIM(到货月份是否确认), ''), 'None')                    AS arrival_confirmed,
     -- ODS为DATETIME，去掉TRIM
     COALESCE(CAST(品牌方确认日期 AS DATE), '1970-01-01')                    AS brand_confirm_date,
-    
+  
     -- 5. 提货信息
     -- ODS为DATETIME，去掉TRIM
     COALESCE(CAST(计划提货日期 AS DATE), '1970-01-01')                      AS plan_pickup_date,
@@ -3233,7 +3230,7 @@ SELECT
     -- ODS为VARCHAR，保留TRIM，转BIGINT
     COALESCE(CAST(NULLIF(TRIM(已提数量), '') AS BIGINT), 0)                 AS picked_qty,
     COALESCE(CAST(NULLIF(TRIM(未提可提数量), '') AS BIGINT), 0)             AS unpicked_qty,
-    
+  
     -- 6. 上架信息
     COALESCE(NULLIF(TRIM(预计上架月份), ''), 'None')                        AS est_shelf_month,
     -- ODS为DATETIME，去掉TRIM
@@ -3241,12 +3238,12 @@ SELECT
     -- ODS为DATETIME，去掉TRIM
     COALESCE(CAST(实际上架时间 AS DATE), '1970-01-01')                      AS actual_shelf_date,
     COALESCE(NULLIF(TRIM(是否上架), ''), 'None')                            AS is_on_shelf,
-    
+  
     -- 7. 运营 (ODS均为VARCHAR，保留TRIM)
     COALESCE(NULLIF(TRIM(素材情况), ''), 'None')                            AS material_status,
     COALESCE(NULLIF(TRIM(图片完成情况), ''), 'None')                        AS image_status,
     COALESCE(NULLIF(TRIM(首次订货到货季度), ''), 'None')                    AS first_order_quarter,
-    
+  
     -- 8. 系统字段 (ODS为DATETIME，去掉TRIM)
     -- 【微调】为兜底值增加显式 CAST，确保在 Presto/Trino 等严格引擎中不会因隐式转换导致类型变为 STRING
     COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))            AS sync_time,
@@ -3282,7 +3279,7 @@ SELECT
     wd.size,
     wd.tag_price,
     wd.order_qty_sku AS order_qty,                                   -- 统一为SKU维度订货量
-    wd.order_date,    
+    wd.order_date,  
     -- 使用 NULLIF 将默认的 '1970-01-01' 转为 NULL，避免影响上架天数计算，韦德直接取上架日期
     NULLIF(CAST(wd.shelf_date AS DATE), CAST('1970-01-01' AS DATE))   AS shelf_date, 
     COALESCE(fs.first_sales_date, fs.first_sales_date) AS first_sales_date,
@@ -3374,7 +3371,7 @@ SELECT
     inv.id                                                                    AS id,
     -- 【修改】ODS为datetime，去掉TRIM/NULLIF，直接提取DATE
     COALESCE(DATE(inv.品牌方库存更新日期), DATE('1970-01-01'))                  AS inventory_date,
-    
+  
     COALESCE(NULLIF(TRIM(inv.record_id), ''), 'None')                         AS record_id,
     COALESCE(NULLIF(TRIM(inv.sku), ''), 'None')                               AS sku,
     COALESCE(NULLIF(TRIM(inv.款号), ''), 'None')                              AS style_no,
@@ -3385,7 +3382,7 @@ SELECT
     COALESCE(NULLIF(TRIM(inv.配色名), ''), 'None')                            AS color_name,
     COALESCE(NULLIF(TRIM(inv.商品类别), ''), 'None')                          AS category,
     COALESCE(NULLIF(TRIM(inv.尺码), ''), 'None')                              AS size,
-    
+  
     -- 库存指标（数量转BIGINT整数，金额转DECIMAL(18,6)）
     -- 【修改】ODS为decimal，去掉TRIM/NULLIF，直接CAST；同时将SIGNED修正为标准的BIGINT
     COALESCE(CAST(inv.库存数量 AS BIGINT), 0)                                 AS inventory_qty,
@@ -3393,15 +3390,15 @@ SELECT
     COALESCE(CAST(inv.含税单价 AS DECIMAL(18,6)), 0)                          AS price_with_tax,
     -- 【修改】ODS为decimal，去掉TRIM/NULLIF，直接CAST
     COALESCE(CAST(inv.吊牌价 AS DECIMAL(18,6)), 0)                            AS tag_price,
-    
+  
     -- 【修正】将MySQL方言 SIGNED 统一修正为大数据标准类型 BIGINT，ODS为varchar，保留TRIM/NULLIF
-    COALESCE(CAST(NULLIF(TRIM(inv.订货数量), '') AS BIGINT), 0)               AS order_qty,                            
-    COALESCE(CAST(NULLIF(TRIM(inv.已提数量), '') AS BIGINT), 0)               AS picked_qty,                           
-    COALESCE(CAST(NULLIF(TRIM(inv.未提数量), '') AS BIGINT), 0)               AS unpicked_qty,                         
-    
+    COALESCE(CAST(NULLIF(TRIM(inv.订货数量), '') AS BIGINT), 0)               AS order_qty,                          
+    COALESCE(CAST(NULLIF(TRIM(inv.已提数量), '') AS BIGINT), 0)               AS picked_qty,                         
+    COALESCE(CAST(NULLIF(TRIM(inv.未提数量), '') AS BIGINT), 0)               AS unpicked_qty,                       
+  
     COALESCE(NULLIF(TRIM(inv.提货标识), ''), 'None')                          AS pickup_flag,
     COALESCE(NULLIF(TRIM(inv.最小颗粒度), ''), 'None')                        AS min_granularity,
-    
+  
     -- ODS为datetime，原SQL已正确处理，保留
     COALESCE(inv.sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))          AS sync_time,
     NOW()                                                                     AS insert_date,
@@ -3424,16 +3421,16 @@ SELECT
     COALESCE(NULLIF(TRIM(otb.年度), ''), 'None')                            AS year,
     COALESCE(otb.id, 0)                                                     AS id,
     COALESCE(NULLIF(TRIM(otb.record_id), ''), 'None')                       AS record_id,
-    
+  
     -- 【修改】ODS为decimal，去掉TRIM/NULLIF，直接CAST
     COALESCE(CAST(otb.`OTB（单位：亿）` AS DECIMAL(18,6)), 0)               AS otb_amount_yi,   -- decimal转DECIMAL(18,6)，单位：亿（如2.000000）
     -- 【修改】ODS为decimal，去掉TRIM/NULLIF，直接CAST
     COALESCE(CAST(otb.订货金额占比 AS DECIMAL(18,6)), 0)                    AS order_amount_ratio,-- decimal转DECIMAL(18,6)，比值（如0.019400）
-    
+  
     -- ODS为varchar，保留TRIM/NULLIF，防止空字符串转DECIMAL报错
     COALESCE(CAST(NULLIF(TRIM(otb.订货牌价), '') AS DECIMAL(18,6)), 0)      AS order_tag_price,   -- varchar转DECIMAL(18,6)，金额（如7129800）
     COALESCE(CAST(NULLIF(TRIM(otb.OTB), '') AS DECIMAL(18,6)), 0)           AS otb_raw,           -- varchar转DECIMAL(18,6)，原始值（如7.02，与otb_amount_yi语义不同）
-    
+  
     -- ODS为datetime，原SQL处理正确，保留
     COALESCE(otb.sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))        AS sync_time,
     NOW()                                                                   AS insert_date,       -- ETL写入插入时间
@@ -3464,7 +3461,7 @@ WITH base_data AS (
             COALESCE(NULLIF(TRIM(款号), ''), 'None'), 
             COALESCE(NULLIF(TRIM(尺码), ''), 'None')
         )                                                         AS style_no_size,
-        
+      
         COALESCE(NULLIF(TRIM(商品SKU), ''), 'None')               AS sku,
         COALESCE(NULLIF(TRIM(款号), ''), 'None')                   AS style_no,
         COALESCE(NULLIF(TRIM(尺码), ''), 'None')                   AS size_code,
@@ -3475,7 +3472,7 @@ WITH base_data AS (
         COALESCE(NULLIF(TRIM(商品分类), ''), 'None')              AS category,
         COALESCE(NULLIF(TRIM(提货状态), ''), 'None')               AS pickup_status,
         COALESCE(NULLIF(TRIM(预计到货年月), ''), 'None')           AS est_arrival_month,
-        
+      
         *-- 数值字段安全转换，为后续聚合叠加做准备*
         COALESCE(CAST(订货数量 AS BIGINT), 0)                      AS order_qty,
         COALESCE(CAST(NULLIF(TRIM(已提货数量), '') AS BIGINT), 0)  AS picked_qty,
@@ -3484,7 +3481,7 @@ WITH base_data AS (
         COALESCE(CAST(NULLIF(TRIM(未提可提数量), '') AS BIGINT), 0) AS unpicked_avail_qty,
         COALESCE(CAST(NULLIF(TRIM(未提不可提数量), '') AS BIGINT), 0) AS unpicked_unavail_qty,
         COALESCE(CAST(NULLIF(TRIM(累计订货), '') AS BIGINT), 0)    AS cumulative_order_qty,
-        
+      
         *-- 日期处理：为空则 CAST(NULL AS DATE)*
         COALESCE(CAST(预计到货时间 AS DATE), CAST(NULL AS DATE))  AS est_arrival_date,
         sync_time
@@ -3494,7 +3491,7 @@ WITH base_data AS (
 *-- 步骤2: 按 style_no_size 聚合*
 SELECT 
     style_no_size,
-    
+  
     *-- 维度字段：同 style_no_size 下可能存在多SKU，取MAX作为代表值*
     MAX(sku)                   AS sku,
     MAX(style_no)              AS style_no,
@@ -3507,7 +3504,7 @@ SELECT
     MAX(pickup_status)         AS pickup_status,
     *-- 预计到货年月：取最早的到货时间对应记录的月份*
     MIN(est_arrival_month)     AS est_arrival_month,
-    
+  
     *-- 度量字段：按 style_no_size 叠加*
     SUM(order_qty)             AS order_qty,
     SUM(picked_qty)            AS picked_qty,
@@ -3516,12 +3513,12 @@ SELECT
     SUM(unpicked_avail_qty)    AS unpicked_avail_qty,
     SUM(unpicked_unavail_qty)  AS unpicked_unavail_qty,
     SUM(cumulative_order_qty)  AS cumulative_order_qty,
-    
+  
     *-- 日期字段：取最早的预计到货时间*
     MIN(est_arrival_date)      AS est_arrival_date,
     *-- 新增字段：预计到货时间 + 30天 (基于最早的到货时间计算)*
     DATE_ADD(MIN(est_arrival_date), INTERVAL 30 DAY) AS 30_est_arrival_date,
-    
+  
     *-- 技术字段：同步时间取最新*
     MAX(sync_time)             AS sync_time,
     NOW()                      AS insert_date,
@@ -3787,7 +3784,7 @@ sku_base AS (
         MAX(CASE WHEN COALESCE(NULLIF(TRIM(p.color_name), ''), 'None') <> 'None' 
                  THEN p.color_name ELSE NULL END)           AS color_name,
         MAX(CASE WHEN COALESCE(NULLIF(TRIM(p.product_name), ''), 'None') <> 'None' 
-                 THEN p.product_name ELSE NULL END)         AS product_name,         
+                 THEN p.product_name ELSE NULL END)         AS product_name,       
         MAX(CASE WHEN COALESCE(NULLIF(TRIM(p.category), ''), 'None') <> 'None' 
                  THEN p.category ELSE NULL END)             AS category,
         -- 口径5.5节：SKC上架时间 = MIN(每个SKU补全后的shelf_date)
@@ -5278,16 +5275,6 @@ SELECT
 FROM feishu_ads.ads_skc_sales_plan_180d_d;
 ```
 
-
-
-
-
-
-
-
-
-
-
 # 6、视图语句
 
 ## DWD:
@@ -5304,19 +5291,19 @@ SELECT
     COALESCE(NULLIF(TRIM(SKU), ''), 'None') AS sku,
     -- 【修改】ODS为datetime，去掉TRIM/NULLIF，直接提取DATE
     COALESCE(DATE(销售日期), DATE('1970-01-01')) AS sales_date,
-    
+  
     -- 【修改】ODS为decimal，去掉TRIM/NULLIF，增加ROUND防止小数直接转BIGINT报错
     COALESCE(CAST(ROUND(`361sport-销量`, 0) AS BIGINT), 0) AS qty_361sport,
     COALESCE(CAST(ROUND(`中国公司(361°客户)-销量`, 0) AS BIGINT), 0) AS qty_china,
     COALESCE(CAST(ROUND(`361°寄样-销量`, 0) AS BIGINT), 0) AS qty_sample,
     COALESCE(CAST(ROUND(`员工内购（香港）-销量`, 0) AS BIGINT), 0) AS qty_staff_hk,
-    
+  
     -- 【修改】ODS为decimal，去掉TRIM/NULLIF，直接CAST转换精度
     COALESCE(CAST(`361sport-金额` AS DECIMAL(18,6)), 0) AS amt_361sport,
     COALESCE(CAST(`中国公司(361°客户)-金额` AS DECIMAL(18,6)), 0) AS amt_china,
     COALESCE(CAST(`361°寄样-金额` AS DECIMAL(18,6)), 0) AS amt_sample,
     COALESCE(CAST(`员工内购（香港）-金额` AS DECIMAL(18,6)), 0) AS amt_staff_hk,
-    
+  
     COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME)) AS sync_time,
     't_361sales_01' AS source_table,
     COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME)) AS insert_date,  -- 视图无ETL写入，用sync_time占位
@@ -5331,17 +5318,17 @@ SELECT
     '361' AS brand, 
     COALESCE(NULLIF(TRIM(SKU), ''), 'None') AS sku,
     COALESCE(DATE(销售日期), DATE('1970-01-01')) AS sales_date,
-    
+  
     COALESCE(CAST(ROUND(`361sport-销量`, 0) AS BIGINT), 0) AS qty_361sport,
     COALESCE(CAST(ROUND(`中国公司(361°客户)-销量`, 0) AS BIGINT), 0) AS qty_china,
     COALESCE(CAST(ROUND(`361°寄样-销量`, 0) AS BIGINT), 0) AS qty_sample,
     COALESCE(CAST(ROUND(`员工内购（香港）-销量`, 0) AS BIGINT), 0) AS qty_staff_hk,
-    
+  
     COALESCE(CAST(`361sport-金额` AS DECIMAL(18,6)), 0) AS amt_361sport,
     COALESCE(CAST(`中国公司(361°客户)-金额` AS DECIMAL(18,6)), 0) AS amt_china,
     COALESCE(CAST(`361°寄样-金额` AS DECIMAL(18,6)), 0) AS amt_sample,
     COALESCE(CAST(`员工内购（香港）-金额` AS DECIMAL(18,6)), 0) AS amt_staff_hk,
-    
+  
     COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME)) AS sync_time,
     't_361sales_02' AS source_table,
     COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME)) AS insert_date,  -- 视图无ETL写入，用sync_time占位
@@ -5358,17 +5345,17 @@ SELECT
     '361' AS brand, 
     COALESCE(NULLIF(TRIM(SKU), ''), 'None') AS sku,
     COALESCE(DATE(销售日期), DATE('1970-01-01')) AS sales_date,
-    
+  
     COALESCE(CAST(ROUND(`361sport-销量`, 0) AS BIGINT), 0) AS qty_361sport,
     COALESCE(CAST(ROUND(`中国公司(361°客户)-销量`, 0) AS BIGINT), 0) AS qty_china,
     COALESCE(CAST(ROUND(`361°寄样-销量`, 0) AS BIGINT), 0) AS qty_sample,
     COALESCE(CAST(ROUND(`员工内购（香港）-销量`, 0) AS BIGINT), 0) AS qty_staff_hk,
-    
+  
     COALESCE(CAST(`361sport-金额` AS DECIMAL(18,6)), 0) AS amt_361sport,
     COALESCE(CAST(`中国公司(361°客户)-金额` AS DECIMAL(18,6)), 0) AS amt_china,
     COALESCE(CAST(`361°寄样-金额` AS DECIMAL(18,6)), 0) AS amt_sample,
     COALESCE(CAST(`员工内购（香港）-金额` AS DECIMAL(18,6)), 0) AS amt_staff_hk,
-    
+  
     COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME)) AS sync_time,
     't_361sales_050' AS source_table,
     COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME)) AS insert_date,  -- 视图无ETL写入，用sync_time占位
@@ -5399,18 +5386,18 @@ SELECT
     COALESCE(NULLIF(TRIM(record_id), ''), 'None')                                   AS record_id,
     '韦德'                                                                           AS brand,
     COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                         AS sku,
-    
+  
     -- 日期时间类型 (datetime)：场景一，去除 TRIM 和 NULLIF
     COALESCE(DATE(销售日期), DATE('1970-01-01'))                                    AS sales_date,
-    
+  
     COALESCE(NULLIF(TRIM(款号), ''), 'None')                                        AS style_no,
     COALESCE(NULLIF(TRIM(尺码), ''), 'None')                                        AS size,
-    
+  
     -- 日期时间类型 (datetime)：场景一，去除 TRIM 和 NULLIF
     COALESCE(DATE(首次销售日期), DATE('1970-01-01'))                                AS first_sales_date,
-    
+  
     COALESCE(NULLIF(TRIM(销售周期所属周), ''), 'None')                              AS sales_week,
-    
+  
     -- ================= 8个销售指标 =================
     -- VARCHAR 转 BIGINT：场景二，先转 DECIMAL 再 ROUND 转 BIGINT
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(`订货+补货1`), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0) AS order_replenish_1,
@@ -5418,16 +5405,16 @@ SELECT
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际总销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)   AS actual_total_qty,
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计销售周期天数), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0) AS est_cycle_days,
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(预计周销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)    AS est_week_qty,
-    
+  
     -- DECIMAL 转 BIGINT：场景一，直接 ROUND 转 BIGINT
     COALESCE(CAST(ROUND(预计销量, 0) AS BIGINT), 0)                                 AS est_qty,
-    
+  
     -- VARCHAR 转 BIGINT：场景二
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际周销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0)    AS actual_week_qty,
-    
+  
     -- DECIMAL 转 BIGINT：场景一
     COALESCE(CAST(ROUND(实际销量, 0) AS BIGINT), 0)                                 AS actual_qty,
-    
+  
     -- ================= 18个渠道销量 =================
     -- DECIMAL 转 BIGINT：场景一，直接 ROUND 转 BIGINT，去除 TRIM 和 NULLIF
     COALESCE(CAST(ROUND(`韦德之道-销量`, 0) AS BIGINT), 0)                          AS qty_wd,
@@ -5448,7 +5435,7 @@ SELECT
     COALESCE(CAST(ROUND(`韦德之道--招待费-销量`, 0) AS BIGINT), 0)                  AS qty_entertainment,
     COALESCE(CAST(ROUND(`韦德德国站-销量`, 0) AS BIGINT), 0)                        AS qty_germany,
     COALESCE(CAST(ROUND(`韦德之道B2B-销量`, 0) AS BIGINT), 0)                       AS qty_b2b,
-    
+  
     -- ================= 18个渠道金额 =================
     -- DECIMAL 转 DECIMAL(18,6)：场景一，直接 CAST 控制精度，去除 TRIM 和 NULLIF
     COALESCE(CAST(`韦德之道-金额` AS DECIMAL(18,6)), 0)                             AS amt_wd,
@@ -5469,13 +5456,13 @@ SELECT
     COALESCE(CAST(`韦德之道--招待费-金额` AS DECIMAL(18,6)), 0)                     AS amt_entertainment,
     COALESCE(CAST(`韦德德国站-金额` AS DECIMAL(18,6)), 0)                           AS amt_germany,
     COALESCE(CAST(`韦德之道B2B-金额` AS DECIMAL(18,6)), 0)                          AS amt_b2b,
-    
+  
     -- ================= 汇总与系统字段 =================
     -- VARCHAR 转 DECIMAL：场景二，保留 TRIM 和 NULLIF
     COALESCE(CAST(NULLIF(TRIM(`总和`), '') AS DECIMAL(18,6)), 0)                    AS total_sum,
     -- DECIMAL 转 DECIMAL：场景一，去除 TRIM 和 NULLIF
     COALESCE(CAST(`总和 副本` AS DECIMAL(18,6)), 0)                                 AS total_sum_copy,
-    
+  
     -- 日期时间类型 (datetime)：场景一
     COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
     'wd_sales_06'                                                                   AS source_table,
@@ -5494,15 +5481,15 @@ SELECT
     COALESCE(NULLIF(TRIM(record_id), ''), 'None')                                   AS record_id,
     '韦德'                                                                           AS brand,
     COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                         AS sku,
-    
+  
     -- 日期时间类型 (datetime)：场景一
     COALESCE(DATE(销售日期), DATE('1970-01-01'))                                    AS sales_date,
-    
+  
     COALESCE(NULLIF(TRIM(款号), ''), 'None')                                        AS style_no,
     COALESCE(NULLIF(TRIM(尺码), ''), 'None')                                        AS size,
     COALESCE(DATE(首次销售日期), DATE('1970-01-01'))                                AS first_sales_date,
     COALESCE(NULLIF(TRIM(销售周期所属周), ''), 'None')                              AS sales_week,
-    
+  
     -- 23分表缺失7个指标补0，保留actual_qty
     0                                                                               AS order_replenish_1,
     0                                                                               AS order_replenish,
@@ -5511,10 +5498,10 @@ SELECT
     0                                                                               AS est_week_qty,
     0                                                                               AS est_qty,
     0                                                                               AS actual_week_qty,
-    
+  
     -- 23分表"实际销量"为varchar，需CAST：场景二
     COALESCE(CAST(ROUND(CAST(NULLIF(TRIM(实际销量), '') AS DECIMAL(18,4)), 0) AS BIGINT), 0) AS actual_qty,
-    
+  
     -- 18个渠道销量 (DECIMAL -> BIGINT，场景一)
     COALESCE(CAST(ROUND(`韦德之道-销量`, 0) AS BIGINT), 0)                          AS qty_wd,
     COALESCE(CAST(ROUND(`韦德之道寄样-销量`, 0) AS BIGINT), 0)                      AS qty_wd_sample,
@@ -5534,7 +5521,7 @@ SELECT
     COALESCE(CAST(ROUND(`韦德之道--招待费-销量`, 0) AS BIGINT), 0)                  AS qty_entertainment,
     COALESCE(CAST(ROUND(`韦德德国站-销量`, 0) AS BIGINT), 0)                        AS qty_germany,
     COALESCE(CAST(ROUND(`韦德之道B2B-销量`, 0) AS BIGINT), 0)                       AS qty_b2b,
-    
+  
     -- 18个渠道金额 (DECIMAL -> DECIMAL，场景一)
     COALESCE(CAST(`韦德之道-金额` AS DECIMAL(18,6)), 0)                             AS amt_wd,
     COALESCE(CAST(`韦德之道寄样-金额` AS DECIMAL(18,6)), 0)                         AS amt_wd_sample,
@@ -5554,12 +5541,12 @@ SELECT
     COALESCE(CAST(`韦德之道--招待费-金额` AS DECIMAL(18,6)), 0)                     AS amt_entertainment,
     COALESCE(CAST(`韦德德国站-金额` AS DECIMAL(18,6)), 0)                           AS amt_germany,
     COALESCE(CAST(`韦德之道B2B-金额` AS DECIMAL(18,6)), 0)                          AS amt_b2b,
-    
+  
     -- 汇总与系统字段 (23缺总和副本)
     -- VARCHAR 转 DECIMAL：场景二
     COALESCE(CAST(NULLIF(TRIM(`总和`), '') AS DECIMAL(18,6)), 0)                    AS total_sum,
     0                                                                               AS total_sum_copy,
-    
+  
     COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
     'wd_sales_23'                                                                   AS source_table,
     COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS insert_date,
@@ -5577,15 +5564,15 @@ SELECT
     COALESCE(NULLIF(TRIM(record_id), ''), 'None')                                   AS record_id,
     '韦德'                                                                           AS brand,
     COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                         AS sku,
-    
+  
     -- 日期时间类型 (datetime)：场景一
     COALESCE(DATE(销售日期), DATE('1970-01-01'))                                    AS sales_date,
-    
+  
     'None'                                                                          AS style_no,
     'None'                                                                          AS size,
     DATE('1970-01-01')                                                              AS first_sales_date,
     'None'                                                                          AS sales_week,
-    
+  
     -- 8个销售指标全缺失补0
     0                                                                               AS order_replenish_1,
     0                                                                               AS order_replenish,
@@ -5595,7 +5582,7 @@ SELECT
     0                                                                               AS est_qty,
     0                                                                               AS actual_week_qty,
     0                                                                               AS actual_qty,
-    
+  
     -- 18个渠道销量 (DECIMAL -> BIGINT，场景一)
     COALESCE(CAST(ROUND(`韦德之道-销量`, 0) AS BIGINT), 0)                          AS qty_wd,
     COALESCE(CAST(ROUND(`韦德之道寄样-销量`, 0) AS BIGINT), 0)                      AS qty_wd_sample,
@@ -5615,7 +5602,7 @@ SELECT
     COALESCE(CAST(ROUND(`韦德之道--招待费-销量`, 0) AS BIGINT), 0)                  AS qty_entertainment,
     COALESCE(CAST(ROUND(`韦德德国站-销量`, 0) AS BIGINT), 0)                        AS qty_germany,
     COALESCE(CAST(ROUND(`韦德之道B2B-销量`, 0) AS BIGINT), 0)                       AS qty_b2b,
-    
+  
     -- 18个渠道金额 (DECIMAL -> DECIMAL，场景一)
     COALESCE(CAST(`韦德之道-金额` AS DECIMAL(18,6)), 0)                             AS amt_wd,
     COALESCE(CAST(`韦德之道寄样-金额` AS DECIMAL(18,6)), 0)                         AS amt_wd_sample,
@@ -5635,11 +5622,11 @@ SELECT
     COALESCE(CAST(`韦德之道--招待费-金额` AS DECIMAL(18,6)), 0)                     AS amt_entertainment,
     COALESCE(CAST(`韦德德国站-金额` AS DECIMAL(18,6)), 0)                           AS amt_germany,
     COALESCE(CAST(`韦德之道B2B-金额` AS DECIMAL(18,6)), 0)                          AS amt_b2b,
-    
+  
     -- 汇总与系统字段 (30全缺失补0)
     0                                                                               AS total_sum,
     0                                                                               AS total_sum_copy,
-    
+  
     COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
     'wd_sales_30'                                                                   AS source_table,
     COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS insert_date,
@@ -5657,15 +5644,15 @@ SELECT
     COALESCE(NULLIF(TRIM(record_id), ''), 'None')                                   AS record_id,
     '韦德'                                                                           AS brand,
     COALESCE(NULLIF(TRIM(SKU), ''), 'None')                                         AS sku,
-    
+  
     -- 日期时间类型 (datetime)：场景一
     COALESCE(DATE(销售日期), DATE('1970-01-01'))                                    AS sales_date,
-    
+  
     'None'                                                                          AS style_no,
     'None'                                                                          AS size,
     DATE('1970-01-01')                                                              AS first_sales_date,
     'None'                                                                          AS sales_week,
-    
+  
     -- 8个销售指标全缺失补0
     0                                                                               AS order_replenish_1,
     0                                                                               AS order_replenish,
@@ -5675,7 +5662,7 @@ SELECT
     0                                                                               AS est_qty,
     0                                                                               AS actual_week_qty,
     0                                                                               AS actual_qty,
-    
+  
     -- 18个渠道销量 (DECIMAL -> BIGINT，场景一)
     COALESCE(CAST(ROUND(`韦德之道-销量`, 0) AS BIGINT), 0)                          AS qty_wd,
     COALESCE(CAST(ROUND(`韦德之道寄样-销量`, 0) AS BIGINT), 0)                      AS qty_wd_sample,
@@ -5695,7 +5682,7 @@ SELECT
     COALESCE(CAST(ROUND(`韦德之道--招待费-销量`, 0) AS BIGINT), 0)                  AS qty_entertainment,
     COALESCE(CAST(ROUND(`韦德德国站-销量`, 0) AS BIGINT), 0)                        AS qty_germany,
     COALESCE(CAST(ROUND(`韦德之道B2B-销量`, 0) AS BIGINT), 0)                       AS qty_b2b,
-    
+  
     -- 18个渠道金额 (DECIMAL -> DECIMAL，场景一)
     COALESCE(CAST(`韦德之道-金额` AS DECIMAL(18,6)), 0)                             AS amt_wd,
     COALESCE(CAST(`韦德之道寄样-金额` AS DECIMAL(18,6)), 0)                         AS amt_wd_sample,
@@ -5715,11 +5702,11 @@ SELECT
     COALESCE(CAST(`韦德之道--招待费-金额` AS DECIMAL(18,6)), 0)                     AS amt_entertainment,
     COALESCE(CAST(`韦德德国站-金额` AS DECIMAL(18,6)), 0)                           AS amt_germany,
     COALESCE(CAST(`韦德之道B2B-金额` AS DECIMAL(18,6)), 0)                          AS amt_b2b,
-    
+  
     -- 汇总与系统字段 (50全缺失补0)
     0                                                                               AS total_sum,
     0                                                                               AS total_sum_copy,
-    
+  
     COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS sync_time,
     'wd_sales_50'                                                                   AS source_table,
     COALESCE(sync_time, CAST('1970-01-01 00:00:00' AS DATETIME))                    AS insert_date,
@@ -6197,4 +6184,3 @@ SELECT * FROM feishu_dws.dws_sku_sales_plan_180d_d
 WHERE 1=1
 and style_no_size = 'ABCV035-3-10'
 ```
-
