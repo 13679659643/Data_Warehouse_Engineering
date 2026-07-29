@@ -446,6 +446,8 @@ CREATE TABLE IF NOT EXISTS feishu_dwd.dwd_feishu_product_all_d (
     `product_name`        VARCHAR(500)    COMMENT "商品名称",
     `category`            VARCHAR(100)     COMMENT "品类/商品分类",
     `size`                VARCHAR(50)     COMMENT "尺码（韦德码/361美码统一）",
+    -- 2.1 评级字段(三期口径第1节：从DWD product_all_d.rating透传)
+    `rating`               VARCHAR(50)     COMMENT "评级",
     -- 3. 度量列
     `tag_price`           DECIMAL(18,6)   COMMENT "吊牌价（金额保留6位小数）",
     `order_qty`           BIGINT          COMMENT "订货数量（统一为SKU维度，整数）",
@@ -632,6 +634,10 @@ CREATE TABLE IF NOT EXISTS feishu_dws.dws_sku_product_info_d (
     `product_name`         VARCHAR(500)    COMMENT "商品名称",
     `category`             VARCHAR(100)    COMMENT "品类",
     `tag_price`            DECIMAL(18,6)   COMMENT "吊牌价(元)",
+    -- 2.1 评级字段(三期口径第1节：从DWD product_all_d.rating透传)
+    `rating`               VARCHAR(50)     COMMENT "评级(来源DWD product_all_d.rating,直接透传)",
+    -- 2.2 销售计划标签(三期口径第2节：基于当前lifecycle_day判定SKU所属销售计划阶段)
+    `sales_plan_tag`       VARCHAR(50)     COMMENT "销售计划标签(<上架时间/>=上架时间,<=180天/>180天,基于当前lifecycle_day,SKU维度当前时间常量,每天刷新)",
     -- 3. 时间字段
     `shelf_date`           DATE            COMMENT "上架日期(空值取30_est_arrival_date补全)",
     `first_sales_date`     DATE            COMMENT "首次销售日期",
@@ -685,6 +691,10 @@ CREATE TABLE IF NOT EXISTS feishu_dws.dws_skc_product_info_d (
     `color_name`           VARCHAR(100)    COMMENT "配色名(取代表值)",
     `product_name`         VARCHAR(500)    COMMENT "商品名称(取代表值)",
     `category`             VARCHAR(100)    COMMENT "品类(取代表值)",
+    -- 2.1 评级字段(三期口径第1节：从DWD product_all_d.rating透传,SKC维度取代表值)
+    `rating`               VARCHAR(50)     COMMENT "SKC评级(来源DWD product_all_d.rating,取代表值)",
+    -- 2.2 销售计划标签(三期口径第2节：基于当前lifecycle_day判定SKC所属销售计划阶段)
+    `sales_plan_tag`       VARCHAR(50)     COMMENT "SKC销售计划标签(<上架时间/>=上架时间,<=180天/>180天,基于当前lifecycle_day,SKC维度当前时间常量,每天刷新)",
     -- 3. 时间字段
     `shelf_date`           DATE            COMMENT "SKC上架日期(MIN(shelf_date))",
     `first_sales_date`     DATE            COMMENT "SKC首次销售日期(MIN(first_sales_date))",
@@ -735,6 +745,8 @@ CREATE TABLE IF NOT EXISTS feishu_dws.dws_sku_sales_plan_180d_d (
     `sale_date_label`      VARCHAR(20)     COMMENT "销售日期标签(1~180显示数字,>180显示超周期)",
     `sales_cycle_label`    VARCHAR(50)     COMMENT "销售周期标签(新品期/热销期/清货期/超周期)",
     `ratio`                DECIMAL(18,6)   COMMENT "阶段比例(新品0.8/热销1.1/清货1.0/超周期NULL)",
+    -- 2.1 销售计划标签(三期口径第2节：关联商品维表取单值,SKU维度当前时间常量,同一SKU所有行值相同)
+    `sales_plan_tag`       VARCHAR(50)     COMMENT "销售计划标签(<上架时间/>=上架时间,<=180天/>180天,关联商品维表取单值)",
     -- 3. 维度属性（冗余便于查询）
     `brand`                VARCHAR(20)     COMMENT "品牌",
     `style_no`             VARCHAR(128)    COMMENT "款号/SKC编码",
@@ -743,8 +755,10 @@ CREATE TABLE IF NOT EXISTS feishu_dws.dws_sku_sales_plan_180d_d (
     -- 4. 订货数量 Q
     `order_qty`            BIGINT          COMMENT "订货数量Q(空值兜底0)",
     -- 5. 销售计划（1~180天计算，超周期为NULL）
-    `plan_pre`             DECIMAL(18,6)   COMMENT "销售计划(销售前)(Q*ratio/180)",
-    `plan_post`            DECIMAL(18,6)   COMMENT "销售计划(销售后)((Q-cum_actual)*ratio/(180-N))",
+    `plan_pre`             DECIMAL(18,6)   COMMENT "销售计划(销售前)(三期口径第4节：按sales_plan_tag分3种逻辑)",
+    `plan_post`            DECIMAL(18,6)   COMMENT "销售计划(销售后)(三期口径第4节：按sales_plan_tag分3种逻辑,引入cum_plan_pre)",
+    -- 5.1 计划销量辅助字段(三期口径第3节：有实际销量取实际,无实际销量取计划,超周期同计划销量)
+    `plan_post_assist`     DECIMAL(18,6)   COMMENT "计划销量辅助(有actual_qty取actual_qty,无则取plan_post,超周期同plan_post)",
     -- 6. 实际销售
     `actual_qty`           BIGINT          COMMENT "实际销售(第N天核心4渠道SUM(qty))",
     `actual_amt`           DECIMAL(18,6)   COMMENT "实际销售金额(第N天核心4渠道SUM(amt))",
@@ -790,14 +804,18 @@ CREATE TABLE IF NOT EXISTS feishu_dws.dws_skc_sales_plan_180d_d (
     `sale_date_label`      VARCHAR(20)     COMMENT "销售日期标签(1~180显示数字,>180显示超周期)",
     `sales_cycle_label`    VARCHAR(50)     COMMENT "销售周期标签",
     `ratio`                DECIMAL(18,6)   COMMENT "阶段比例",
+    -- 2.1 销售计划标签(三期口径第2节：关联商品维表取单值,SKC维度当前时间常量,同一SKC所有行值相同)
+    `sales_plan_tag`       VARCHAR(50)     COMMENT "SKC销售计划标签(<上架时间/>=上架时间,<=180天/>180天,关联商品维表取单值)",
     -- 3. 维度属性（冗余）
     `brand`                VARCHAR(20)     COMMENT "品牌",
     `shelf_date`           DATE            COMMENT "SKC上架日期(MIN(shelf_date))",
     -- 4. 订货数量 Q
     `order_qty`            BIGINT          COMMENT "SKC订货数量Q(SUM(order_qty)按style_no聚合)",
     -- 5. 销售计划
-    `plan_pre`             DECIMAL(18,6)   COMMENT "销售计划(销售前)",
-    `plan_post`            DECIMAL(18,6)   COMMENT "销售计划(销售后)",
+    `plan_pre`             DECIMAL(18,6)   COMMENT "SKC销售计划(销售前)(三期口径第4节：按sales_plan_tag分3种逻辑)",
+    `plan_post`            DECIMAL(18,6)   COMMENT "SKC销售计划(销售后)(三期口径第4节：按sales_plan_tag分3种逻辑,引入cum_plan_pre)",
+    -- 5.1 计划销量辅助字段(三期口径第3节：有实际销量取实际,无实际销量取计划,超周期同计划销量)
+    `plan_post_assist`     DECIMAL(18,6)   COMMENT "SKC计划销量辅助(有actual_qty取actual_qty,无则取plan_post,超周期同plan_post)",
     -- 6. 实际销售
     `actual_qty`           BIGINT          COMMENT "实际销售(第N天核心4渠道SUM(qty)按style_no聚合)",
     `actual_amt`           DECIMAL(18,6)   COMMENT "实际销售金额(第N天核心4渠道SUM(amt))",
@@ -921,11 +939,17 @@ CREATE TABLE IF NOT EXISTS feishu_ads.ads_sku_sales_plan_180d_d (
     `product_name`             VARCHAR(500)    COMMENT "商品名称",
     `category`                 VARCHAR(100)    COMMENT "品类",
     `tag_price`                DECIMAL(18,6)   COMMENT "吊牌价(元)",
+    -- 3.1 评级字段(三期口径第1节：从DWS商品维表透传)
+    `rating`                   VARCHAR(50)     COMMENT "评级(来源DWS商品维表rating,直接透传)",
+    -- 3.2 销售计划标签(三期口径第2节：关联DWS商品维表取单值,SKU维度当前时间常量)
+    `sales_plan_tag`           VARCHAR(50)     COMMENT "销售计划标签(<上架时间/>=上架时间,<=180天/>180天,关联DWS商品维表取单值,SKU维度当前时间常量,每天刷新)",
     `shelf_date`               DATE            COMMENT "上架日期",
     `first_sales_date`         DATE            COMMENT "首次销售日期",
     -- 4. 销售计划(1~180天计算,超周期为NULL)
-    `plan_pre`                 DECIMAL(18,6)   COMMENT "销售计划(销售前)(Q*ratio/180)",
-    `plan_post`                DECIMAL(18,6)   COMMENT "销售计划(销售后)((Q-cum_actual)*ratio/(181-N))",
+    `plan_pre`                 DECIMAL(18,6)   COMMENT "销售计划(销售前)(三期口径第4节：按sales_plan_tag分3种逻辑)",
+    `plan_post`                DECIMAL(18,6)   COMMENT "销售计划(销售后)(三期口径第4节：按sales_plan_tag分3种逻辑,引入cum_plan_pre)",
+    -- 4.1 计划销量辅助字段(三期口径第3节：有actual_qty取actual_qty,无则取plan_post,超周期同plan_post)
+    `plan_post_assist`         DECIMAL(18,6)   COMMENT "计划销量辅助(有actual_qty取actual_qty,无则取plan_post,超周期同plan_post)",
     `plan_amt`                 DECIMAL(18,6)   COMMENT "计划金额(预计收款单价*plan_post,ip=服配/篮球单价=tag_price*1.2,其他单价=销售美金*6.8)",
     -- 5. 实际销售与累计
     `daily_qty`                BIGINT          COMMENT "日销量(第N天核心4渠道SUM(qty))",
@@ -960,6 +984,8 @@ CREATE TABLE IF NOT EXISTS feishu_ads.ads_sku_sales_plan_180d_d (
     `current_cum_actual`         BIGINT        COMMENT "SKU累计实际销量(截至N天,核心4渠道,取DWS商品维表cum_actual,SKU维度当前时间常量,每天刷新)",
     `current_achievement_ratio`  DECIMAL(18,6) COMMENT "当前达成比例(取DWS商品维表achievement_ratio,SKU维度当前时间常量,每天刷新)",
     `current_should_achieve_ratio` DECIMAL(18,6) COMMENT "当前应达成比例(取DWS商品维表should_achieve_ratio,SKU维度当前时间常量,每天刷新)",
+    -- 10.1 当前累计计划销量(三期口径第5节：取销售计划表昨日cum_plan_qty,SKU维度当前时间常量,每天刷新)
+    `current_cum_plan_qty`      DECIMAL(18,6) COMMENT "SKU当前累计计划销量(取销售计划表昨日cum_plan_qty,SKU维度当前时间常量,每天刷新,同一SKU不同sale_date值相同)",
     -- 11. 技术字段
     `sync_time`                DATETIME        COMMENT "ODS同步时间",
     `insert_date`              DATETIME        COMMENT "ADS记录插入时间(ETL写入)",
@@ -999,11 +1025,17 @@ CREATE TABLE IF NOT EXISTS feishu_ads.ads_skc_sales_plan_180d_d (
     `product_name`             VARCHAR(500)    COMMENT "商品名称(取代表值)",
     `category`                 VARCHAR(100)    COMMENT "品类(取代表值)",
     `tag_price`                DECIMAL(18,6)   COMMENT "吊牌价(元)",
+    -- 3.1 评级字段(三期口径第1节：从DWS商品维表透传)
+    `rating`                   VARCHAR(50)     COMMENT "SKC评级(来源DWS商品维表rating,取代表值)",
+    -- 3.2 销售计划标签(三期口径第2节：关联DWS商品维表取单值,SKC维度当前时间常量)
+    `sales_plan_tag`           VARCHAR(50)     COMMENT "SKC销售计划标签(<上架时间/>=上架时间,<=180天/>180天,关联DWS商品维表取单值,SKC维度当前时间常量,每天刷新)",
     `shelf_date`               DATE            COMMENT "SKC上架日期(MIN(shelf_date))",
     `first_sales_date`         DATE            COMMENT "SKC首次销售日期(MIN(first_sales_date))",
     -- 4. 销售计划(1~180天计算,超周期为NULL)
-    `plan_pre`                 DECIMAL(18,6)   COMMENT "销售计划(销售前)(Q*ratio/180)",
-    `plan_post`                DECIMAL(18,6)   COMMENT "销售计划(销售后)((Q-cum_actual)*ratio/(181-N))",
+    `plan_pre`                 DECIMAL(18,6)   COMMENT "SKC销售计划(销售前)(三期口径第4节：按sales_plan_tag分3种逻辑)",
+    `plan_post`                DECIMAL(18,6)   COMMENT "SKC销售计划(销售后)(三期口径第4节：按sales_plan_tag分3种逻辑,引入cum_plan_pre)",
+    -- 4.1 计划销量辅助字段(三期口径第3节：有actual_qty取actual_qty,无则取plan_post,超周期同plan_post)
+    `plan_post_assist`         DECIMAL(18,6)   COMMENT "SKC计划销量辅助(有actual_qty取actual_qty,无则取plan_post,超周期同plan_post)",
     -- 5. 实际销售与累计
     `daily_qty`                BIGINT          COMMENT "日销量(第N天核心4渠道SUM(qty)按style_no聚合)",
     `daily_amt`                DECIMAL(18,6)   COMMENT "日金额(第N天核心4渠道SUM(amt))",
@@ -1035,6 +1067,8 @@ CREATE TABLE IF NOT EXISTS feishu_ads.ads_skc_sales_plan_180d_d (
     `current_cum_actual`         BIGINT        COMMENT "SKC累计实际销量(截至N天,核心4渠道,取DWS商品维表cum_actual,SKC维度当前时间常量,每天刷新)",
     `current_achievement_ratio`  DECIMAL(18,6) COMMENT "当前SKC达成比例(取DWS商品维表achievement_ratio,SKC维度当前时间常量,每天刷新)",
     `current_should_achieve_ratio` DECIMAL(18,6) COMMENT "当前SKC应达成比例(取DWS商品维表should_achieve_ratio,SKC维度当前时间常量,每天刷新)",
+    -- 10.1 当前累计计划销量(三期口径第5节：取销售计划表昨日cum_plan_qty,SKC维度当前时间常量,每天刷新)
+    `current_cum_plan_qty`      DECIMAL(18,6) COMMENT "SKC当前累计计划销量(取销售计划表昨日cum_plan_qty,SKC维度当前时间常量,每天刷新,同一SKC不同sale_date值相同)",
     -- 11. 技术字段
     `sync_time`                DATETIME        COMMENT "ODS同步时间",
     `insert_date`              DATETIME        COMMENT "ADS记录插入时间(ETL写入)",
@@ -3261,7 +3295,7 @@ WHERE SKU IS NOT NULL AND TRIM(SKU) <> '';                    -- 过滤空SKU（
 ```SQL
 -- 韦德商品库（来源DWD-4）
 INSERT INTO feishu_dwd.dwd_feishu_product_all_d (
-    sku, brand, style_no, ip, series, color_name, product_name, category, size,
+    sku, brand, style_no, ip, series, color_name, product_name, category, size,rating,
     tag_price, order_qty, order_date, shelf_date, first_sales_date,
     first_order_quarter, year, inventory_sku, 
     order_qty_skc, inventory_skc, sales_cycle_label, is_replenish, replenish_qty,
@@ -3277,9 +3311,10 @@ SELECT
     wd.product_name,
     wd.product_category AS category,                                 -- 韦德 product_category → 统一 category
     wd.size,
+    wd.rating,
     wd.tag_price,
     wd.order_qty_sku AS order_qty,                                   -- 统一为SKU维度订货量
-    wd.order_date,  
+    wd.order_date,    
     -- 使用 NULLIF 将默认的 '1970-01-01' 转为 NULL，避免影响上架天数计算，韦德直接取上架日期
     NULLIF(CAST(wd.shelf_date AS DATE), CAST('1970-01-01' AS DATE))   AS shelf_date, 
     COALESCE(fs.first_sales_date, fs.first_sales_date) AS first_sales_date,
@@ -3308,7 +3343,7 @@ WHERE wd.sku IS NOT NULL;
 ```SQL
 -- 361商品库（来源DWD-5）
 INSERT INTO feishu_dwd.dwd_feishu_product_all_d (
-    sku, brand, style_no, ip, series, color_name, product_name, category, size,
+    sku, brand, style_no, ip, series, color_name, product_name, category, size,rating,
     tag_price, order_qty, order_date, shelf_date, first_sales_date,
     first_order_quarter, year, inventory_sku, 
     order_qty_skc, inventory_skc, sales_cycle_label, is_replenish, replenish_qty,
@@ -3324,6 +3359,7 @@ SELECT
     p.product_name                                                          AS product_name,
     p.category                                                              AS category,
     p.size_us                                                               AS size,                                        -- 361用美码作为统一尺码
+    NULL                                                                    AS rating,
     p.tag_price                                                             AS tag_price,
     p.order_qty                                                             AS order_qty,
     p.order_date                                                            AS order_date,
@@ -3542,7 +3578,8 @@ TRUNCATE TABLE feishu_dws.dws_sku_product_info_d;
 
 INSERT INTO feishu_dws.dws_sku_product_info_d (
     style_no_size, brand, style_no, size, ip, series, color_name,
-    product_name, category, tag_price, shelf_date, first_sales_date,
+    product_name, category, tag_price, rating, sales_plan_tag,
+    shelf_date, first_sales_date,
     inventory_sku, available_inventory, order_qty, replenish_qty,
     is_replenish, total_order_qty, cum_actual, daily_avg_qty_30d,
     sellable_days, sellable_days_order, order_qty_ratio,
@@ -3575,6 +3612,8 @@ product_base AS (
         p.product_name                                     AS product_name,
         p.category                                         AS category,
         COALESCE(p.tag_price, 0)                           AS tag_price,
+        -- 三期口径第1节：评级字段从DWD product_all_d.rating直接透传
+        COALESCE(NULLIF(TRIM(p.rating), ''), 'None')       AS rating,
         -- 口径3.5节：shelf_date 优先取 product_all_d.shelf_date，为空取最早的 30_est_arrival_date
         COALESCE(
             NULLIF(p.shelf_date, DATE('1970-01-01')),
@@ -3668,6 +3707,18 @@ SELECT
     pb.product_name                                        AS product_name,
     pb.category                                            AS category,
     pb.tag_price                                           AS tag_price,
+    -- 三期口径第1节：评级字段(从product_base透传,来源DWD product_all_d.rating)
+    pb.rating                                              AS rating,
+    -- 三期口径第2节：销售计划标签(基于当前lifecycle_day判定,SKU维度当前时间常量,每天刷新)
+    --    lifecycle_day<=0: 当前时间在销售计划之前,分组为"<上架时间"
+    --    0<lifecycle_day<=180: 当前时间在销售计划之中,分组为">=上架时间,<=180天"
+    --    lifecycle_day>180: 当前时间在销售计划之后,分组为">180天"
+    CASE
+        WHEN DATEDIFF(CURRENT_DATE(), pb.shelf_date) + 1 <= 0   THEN '<上架时间'
+        WHEN DATEDIFF(CURRENT_DATE(), pb.shelf_date) + 1 BETWEEN 1 AND 180 THEN '>=上架时间,<=180天'
+        WHEN DATEDIFF(CURRENT_DATE(), pb.shelf_date) + 1 > 180  THEN '>180天'
+        ELSE NULL
+    END                                                    AS sales_plan_tag,
     pb.shelf_date                                          AS shelf_date,
     pb.first_sales_date                                    AS first_sales_date,
     pb.inventory_sku                                       AS inventory_sku,
@@ -3753,6 +3804,7 @@ TRUNCATE TABLE feishu_dws.dws_skc_product_info_d;
 
 INSERT INTO feishu_dws.dws_skc_product_info_d (
     style_no, brand, ip, series, color_name, product_name, category,
+    rating, sales_plan_tag,
     shelf_date, first_sales_date, inventory_sku, available_inventory,
     order_qty, replenish_qty, total_order_qty, cum_actual, daily_avg_qty_30d,
     sellable_days, sellable_days_order, achievement_ratio, should_achieve_ratio, lifecycle_day, sales_cycle_label,
@@ -3786,7 +3838,10 @@ sku_base AS (
         MAX(CASE WHEN COALESCE(NULLIF(TRIM(p.product_name), ''), 'None') <> 'None' 
                  THEN p.product_name ELSE NULL END)         AS product_name,       
         MAX(CASE WHEN COALESCE(NULLIF(TRIM(p.category), ''), 'None') <> 'None' 
-                 THEN p.category ELSE NULL END)             AS category,
+                 THEN p.category ELSE NULL END)               AS category,
+        -- 三期口径第1节：SKC评级取代表值(优先取非None的有效值,全为None则返回None)
+        MAX(CASE WHEN COALESCE(NULLIF(TRIM(p.rating), ''), 'None') <> 'None'
+                 THEN p.rating ELSE NULL END)                 AS rating,
         -- 口径5.5节：SKC上架时间 = MIN(每个SKU补全后的shelf_date)
         MIN(COALESCE(
             NULLIF(p.shelf_date, DATE('1970-01-01')),
@@ -3870,6 +3925,18 @@ SELECT
     COALESCE(sb.color_name, 'None')                        AS color_name,
     COALESCE(sb.product_name, 'None')                      AS product_name,
     COALESCE(sb.category, 'None')                          AS category,
+    -- 三期口径第1节：SKC评级(从sku_base透传,取代表值)
+    COALESCE(sb.rating, 'None')                            AS rating,
+    -- 三期口径第2节：SKC销售计划标签(基于当前lifecycle_day判定,SKC维度当前时间常量,每天刷新)
+    --    lifecycle_day<=0: 当前时间在销售计划之前,分组为"<上架时间"
+    --    0<lifecycle_day<=180: 当前时间在销售计划之中,分组为">=上架时间,<=180天"
+    --    lifecycle_day>180: 当前时间在销售计划之后,分组为">180天"
+    CASE
+        WHEN DATEDIFF(CURRENT_DATE(), sb.shelf_date) + 1 <= 0   THEN '<上架时间'
+        WHEN DATEDIFF(CURRENT_DATE(), sb.shelf_date) + 1 BETWEEN 1 AND 180 THEN '>=上架时间,<=180天'
+        WHEN DATEDIFF(CURRENT_DATE(), sb.shelf_date) + 1 > 180  THEN '>180天'
+        ELSE NULL
+    END                                                    AS sales_plan_tag,
     sb.shelf_date                                          AS shelf_date,
     sb.first_sales_date                                    AS first_sales_date,
     sb.inventory_sku                                       AS inventory_sku,
@@ -3951,8 +4018,8 @@ TRUNCATE TABLE feishu_dws.dws_sku_sales_plan_180d_d;
 
 INSERT INTO feishu_dws.dws_sku_sales_plan_180d_d (
     style_no_size, sale_date, lifecycle_day, sale_date_label,
-    sales_cycle_label, ratio, brand, style_no, size, shelf_date,
-    order_qty, plan_pre, plan_post, actual_qty, actual_amt,
+    sales_cycle_label, ratio, sales_plan_tag, brand, style_no, size, shelf_date,
+    order_qty, plan_pre, plan_post, plan_post_assist, actual_qty, actual_amt,
     cum_actual, cum_actual_amt, cum_plan_qty, cum_plan_amt, should_achieve_ratio, achievement_rate,
     inventory_sku, available_inventory, sellable_days,
     sync_time, insert_date, update_date
@@ -4009,6 +4076,8 @@ sku_calendar AS (
         p.available_inventory                                 AS available_inventory,
         p.order_qty                                           AS order_qty,
         p.sync_time                                           AS sync_time,
+        -- 三期口径第2节：销售计划标签(从商品维表取单值,SKU维度当前时间常量,同一SKU所有行值相同)
+        p.sales_plan_tag                                      AS sales_plan_tag,
         -- 上市第N天 = 偏移量 + 1
         gs.day_offset + 1                                     AS lifecycle_day,
         -- 具体的日期 = shelf_date + 偏移量
@@ -4058,6 +4127,7 @@ sales_cum AS (
         inventory_sku,
         available_inventory,
         sync_time,
+        sales_plan_tag,
         -- 1 PRECEDING：往前数1个人（也就是昨天）。
         -- UNBOUNDED PRECEDING：一直往前到队伍的最开头（也就是上市第一天）。
         -- 30 PRECEDING：从当前位置往前数30个人（也就是往前推30天）。
@@ -4072,13 +4142,14 @@ sales_cum AS (
     FROM sku_with_sales
 ),
 -- ============================================================
--- 6.1 计算 plan_post_value（基于 cum_actual），供后续累计
---     plan_post 依赖 cum_actual(N-1)，须先在 sales_cum 中算出 cum_actual 再计算
+-- 6.1 计算初始 plan_post_value(基于 cum_actual,未按三期口径调整),供后续计算 plan_post_assist 和 cum_plan_pre
+--     该值为二期原逻辑 plan_post = (Q - cum_actual(N)) * ratio / (181 - N)，超周期为NULL
+--     三期口径第4节：根据 sales_plan_tag 对 plan_pre/plan_post 逻辑调整,但 plan_post_assist 需要该基础值
 -- ============================================================
 plan_post_calc AS (
     SELECT
         sc.*,
-        -- plan_post(N) = (Q - cum_actual(N)) * ratio / (181 - N)，超周期为NULL
+        -- plan_post_value(二期原逻辑) = (Q - cum_actual(N)) * ratio / (181 - N)，超周期为NULL
         CASE WHEN sc.lifecycle_day BETWEEN 1 AND 180
              THEN (CAST(sc.order_qty AS DECIMAL(18,6))
                    - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
@@ -4093,18 +4164,135 @@ plan_post_calc AS (
     FROM sales_cum sc
 ),
 -- ============================================================
--- 6.2 累计计划销量 = 截至N-1天的 SUM(plan_post_value)，在连续日历上累计
---     超周期段 plan_post_value 为 NULL，累计结果为 NULL
+-- 6.2 计算计划销量辅助字段 plan_post_assist(三期口径第3节)
+--     规则：
+--       1. sales_plan_tag='<上架时间': plan_post_assist = plan_post_value(始终为计划销量)
+--       2. sales_plan_tag='>=上架时间,<=180天': actual_qty>0 取 actual_qty,否则取 plan_post_value
+--       3. sales_plan_tag='>180天': plan_post_assist = plan_post_value(始终为计划销量)
+--     超周期段(>180天) plan_post_value 为 NULL,plan_post_assist 也为 NULL
+-- ============================================================
+plan_assist_calc AS (
+    SELECT
+        pc.*,
+        CASE
+            WHEN pc.sales_plan_tag = '>=上架时间,<=180天' AND pc.lifecycle_day BETWEEN 1 AND 180 THEN
+                -- 有实际销量取实际,无实际销量取计划
+                CASE WHEN COALESCE(pc.actual_qty, 0) > 0
+                     THEN CAST(pc.actual_qty AS DECIMAL(18,6))
+                     ELSE pc.plan_post_value
+                END
+            ELSE pc.plan_post_value
+        END AS plan_post_assist
+    FROM plan_post_calc pc
+),
+-- ============================================================
+-- 6.3 累计 plan_post_assist(截至N-1天),用于三期口径第4节的 cum_plan_pre
+--     cum_plan_pre(N) = SUM(plan_post_assist) 截至N-1天(不含当天N)
+--     口径验证(示例第4天): cum_plan_pre(4) = assist(1)+assist(2)+assist(3) = 5+10+4.4269 = 19.4269
+--     公式中 (Q - cum_actual(N) - cum_plan_pre(N)) 的 cum_plan_pre 已包含实际销量累计
+--     等价于 cum_plan_pre(N) - cum_actual(N) = 纯计划代替值累计(即示例中 4.4269)
+-- ============================================================
+cum_plan_pre_calc AS (
+    SELECT
+        pa.*,
+        -- cum_plan_pre = 截至N-1天的 SUM(plan_post_assist),不含当天N
+        SUM(CASE WHEN pa.lifecycle_day BETWEEN 1 AND 180
+                 THEN pa.plan_post_assist ELSE NULL END
+           ) OVER (PARTITION BY pa.style_no_size ORDER BY pa.sale_date
+                   ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS cum_plan_pre
+    FROM plan_assist_calc pa
+),
+-- ============================================================
+-- 6.4 三期口径第4节：按 sales_plan_tag 分3种逻辑计算 plan_pre/plan_post,并累计 cum_plan_qty
+--     逻辑：
+--       1. '<上架时间': plan_pre=(Q-cum_plan_pre)*ratio, plan_post=(Q-cum_plan_pre)*ratio/(181-N), 超周期为0
+--       2. '>=上架时间,<=180天': plan_pre=(Q-cum_actual-cum_plan_pre)*ratio, plan_post=同, 超周期为0
+--          plan_post 最终值参考 plan_post_assist: 有actual_qty取actual_qty,无则取公式计算值
+--       3. '>180天': plan_pre=(Q-cum_actual)*ratio, plan_post=(Q-cum_actual)*ratio/(181-N), 超周期为0
+--     注：cum_plan_pre 已含实际销量累计,公式中减去 cum_plan_pre 即可(不需再单独减 cum_actual,
+--         因为 cum_plan_pre = SUM(assist) = cum_actual + 纯计划代替值累计)
+-- ============================================================
+plan_final_calc AS (
+    SELECT
+        cpc.*,
+        -- 三期口径第4节：plan_pre 按 sales_plan_tag 分3种逻辑(超周期为0)
+        CASE
+            WHEN cpc.lifecycle_day > 180 THEN CAST(0 AS DECIMAL(18,6))
+            WHEN cpc.sales_plan_tag = '<上架时间' THEN
+                (CAST(cpc.order_qty AS DECIMAL(18,6))
+                 - CAST(COALESCE(cpc.cum_plan_pre, 0) AS DECIMAL(18,6)))
+                * CASE
+                    WHEN cpc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
+                    WHEN cpc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
+                    WHEN cpc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
+                  END
+            WHEN cpc.sales_plan_tag = '>=上架时间,<=180天' THEN
+                (CAST(cpc.order_qty AS DECIMAL(18,6))
+                 - CAST(COALESCE(cpc.cum_actual, 0) AS DECIMAL(18,6))
+                 - CAST(COALESCE(cpc.cum_plan_pre, 0) AS DECIMAL(18,6)))
+                * CASE
+                    WHEN cpc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
+                    WHEN cpc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
+                    WHEN cpc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
+                  END
+            WHEN cpc.sales_plan_tag = '>180天' THEN
+                (CAST(cpc.order_qty AS DECIMAL(18,6))
+                 - CAST(COALESCE(cpc.cum_actual, 0) AS DECIMAL(18,6)))
+                * CASE
+                    WHEN cpc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
+                    WHEN cpc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
+                    WHEN cpc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
+                  END
+            ELSE NULL
+        END AS plan_pre_final,
+        -- 三期口径第4节：plan_post 按 sales_plan_tag 分3种逻辑(超周期为0)
+        CASE
+            WHEN cpc.lifecycle_day > 180 THEN CAST(0 AS DECIMAL(18,6))
+            WHEN cpc.sales_plan_tag = '<上架时间' THEN
+                (CAST(cpc.order_qty AS DECIMAL(18,6))
+                 - CAST(COALESCE(cpc.cum_plan_pre, 0) AS DECIMAL(18,6)))
+                * CASE
+                    WHEN cpc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
+                    WHEN cpc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
+                    WHEN cpc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
+                  END
+                / NULLIF(181 - cpc.lifecycle_day, 0)
+            WHEN cpc.sales_plan_tag = '>=上架时间,<=180天' THEN
+                (CAST(cpc.order_qty AS DECIMAL(18,6))
+                 - CAST(COALESCE(cpc.cum_actual, 0) AS DECIMAL(18,6))
+                 - CAST(COALESCE(cpc.cum_plan_pre, 0) AS DECIMAL(18,6)))
+                * CASE
+                    WHEN cpc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
+                    WHEN cpc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
+                    WHEN cpc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
+                  END
+                / NULLIF(181 - cpc.lifecycle_day, 0)
+            WHEN cpc.sales_plan_tag = '>180天' THEN
+                (CAST(cpc.order_qty AS DECIMAL(18,6))
+                 - CAST(COALESCE(cpc.cum_actual, 0) AS DECIMAL(18,6)))
+                * CASE
+                    WHEN cpc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
+                    WHEN cpc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
+                    WHEN cpc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
+                  END
+                / NULLIF(181 - cpc.lifecycle_day, 0)
+            ELSE NULL
+        END AS plan_post_final
+    FROM cum_plan_pre_calc cpc
+),
+-- ============================================================
+-- 6.5 累计计划销量 cum_plan_qty = 截至N-1天的 SUM(plan_post_final)
+--     口径与二期一致(累计 plan_post,不含当天N),超周期段累计为 NULL
 -- ============================================================
 cum_plan AS (
     SELECT
         pc.*,
-        -- 累计计划销量 = 截至N-1天的 SUM(plan_post_value)，不含当天N
+        -- 累计计划销量 = 截至N-1天的 SUM(plan_post_final)，不含当天N
         SUM(CASE WHEN pc.lifecycle_day BETWEEN 1 AND 180
-                 THEN pc.plan_post_value ELSE NULL END
+                 THEN pc.plan_post_final ELSE NULL END
            ) OVER (PARTITION BY pc.style_no_size ORDER BY pc.sale_date
                    ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS cum_plan_qty
-    FROM plan_post_calc pc
+    FROM plan_final_calc pc
 )
 SELECT
     sc.style_no_size                                       AS style_no_size,
@@ -4129,34 +4317,26 @@ SELECT
         WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
         ELSE NULL
     END                                                    AS ratio,
+    -- 三期口径第2节：销售计划标签(关联商品维表取单值,SKU维度当前时间常量)
+    sc.sales_plan_tag                                      AS sales_plan_tag,
     sc.brand                                               AS brand,
     sc.style_no                                            AS style_no,
     sc.size                                                AS size,
     sc.shelf_date                                          AS shelf_date,
     sc.order_qty                                           AS order_qty,
-    -- 口径4.3节：plan_pre = (Q - cum_actual(N)) * ratio （超周期为NULL）
-    CASE WHEN sc.lifecycle_day BETWEEN 1 AND 180
-         THEN (CAST(sc.order_qty AS DECIMAL(18,6))
-               - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
-              * CASE
-                  WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                  WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                  WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                END
-         ELSE NULL
-    END                                                    AS plan_pre,
-    -- 口径4.4节：plan_post = (Q - cum_actual(N)) * ratio / (181 - N)
-    --    cum_actual(N) = 截至N-1天的累计销量（在连续日历上计算，修复稀疏断档Bug）
-    --    分母 = 180 - sold_days = 180 - (N-1) = 181 - N
-    --    超周期为NULL
-    sc.plan_post_value                                     AS plan_post,
+    -- 三期口径第4节：plan_pre 按 sales_plan_tag 分3种逻辑(超周期为0,来自 plan_pre_final)
+    sc.plan_pre_final                                      AS plan_pre,
+    -- 三期口径第4节：plan_post 按 sales_plan_tag 分3种逻辑(超周期为0,来自 plan_post_final)
+    sc.plan_post_final                                     AS plan_post,
+    -- 三期口径第3节：计划销量辅助字段(有actual_qty取actual_qty,无则取plan_post_value,超周期为NULL)
+    sc.plan_post_assist                                    AS plan_post_assist,
     -- 口径4.5节：实际销售 = 第N天的 SUM(qty)，没销量的日期为0
     sc.actual_qty                                          AS actual_qty,
     sc.actual_amt                                          AS actual_amt,
     -- 累计实际销量 = 截至N-1天的 SUM(qty)
     COALESCE(sc.cum_actual, 0)                             AS cum_actual,
     COALESCE(sc.cum_actual_amt, 0)                          AS cum_actual_amt,
-    -- 累计计划销量 = 截至N-1天的 SUM(plan_post)，超周期段累计为 NULL
+    -- 累计计划销量 = 截至N-1天的 SUM(plan_post_final)，超周期段累计为 NULL
     sc.cum_plan_qty                                        AS cum_plan_qty,
     -- 累计计划金额 = 截至N-1天，占位0（后续补全）
     CAST(0 AS DECIMAL(18,6))                               AS cum_plan_amt,
@@ -4164,18 +4344,10 @@ SELECT
     --   超周期段 cum_plan_qty 为 NULL，结果为 NULL
     CAST(sc.cum_plan_qty AS DECIMAL(18,6))
         / NULLIF(CAST(sc.order_qty AS DECIMAL(18,6)), 0)   AS should_achieve_ratio,
-    -- 口径4.6节：达成情况 = actual_qty / plan_post
+    -- 口径4.6节：达成情况 = actual_qty / plan_post(三期使用 plan_post_final)
     CASE WHEN sc.lifecycle_day BETWEEN 1 AND 180
          THEN CAST(sc.actual_qty AS DECIMAL(18,6))
-              / NULLIF(
-                  (CAST(sc.order_qty AS DECIMAL(18,6))
-                   - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
-                  * CASE
-                      WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                      WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                      WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                    END
-                  / NULLIF(181 - sc.lifecycle_day, 0), 0)
+              / NULLIF(sc.plan_post_final, 0)
          ELSE NULL
     END                                                    AS achievement_rate,
     sc.inventory_sku                                       AS inventory_sku,
@@ -4229,8 +4401,8 @@ TRUNCATE TABLE feishu_dws.dws_skc_sales_plan_180d_d;
 
 INSERT INTO feishu_dws.dws_skc_sales_plan_180d_d (
     style_no, sale_date, lifecycle_day, sale_date_label,
-    sales_cycle_label, ratio, brand, shelf_date,
-    order_qty, plan_pre, plan_post, actual_qty, actual_amt,
+    sales_cycle_label, ratio, sales_plan_tag, brand, shelf_date,
+    order_qty, plan_pre, plan_post, plan_post_assist, actual_qty, actual_amt,
     cum_actual, cum_actual_amt, cum_plan_qty, cum_plan_amt, should_achieve_ratio, achievement_rate,
     inventory_sku, available_inventory, sellable_days,
     sync_time, insert_date, update_date
@@ -4282,6 +4454,8 @@ skc_calendar AS (
         p.available_inventory                                 AS available_inventory,
         p.order_qty                                           AS order_qty,
         p.sync_time                                           AS sync_time,
+        -- 三期口径第2节：SKC销售计划标签(从商品维表取单值,SKC维度当前时间常量,同一SKC所有行值相同)
+        p.sales_plan_tag                                      AS sales_plan_tag,
         -- 上市第N天 = 偏移量 + 1
         gs.day_offset + 1                                     AS lifecycle_day,
         -- 具体的日期 = shelf_date + 偏移量
@@ -4327,6 +4501,7 @@ sales_cum_skc AS (
         inventory_sku,
         available_inventory,
         sync_time,
+        sales_plan_tag,
         -- 1 PRECEDING：往前数1个人（也就是昨天）。
         -- UNBOUNDED PRECEDING：一直往前到队伍的最开头（也就是上市第一天）。
         -- 30 PRECEDING：从当前位置往前数30个人（也就是往前推30天）。
@@ -4341,13 +4516,14 @@ sales_cum_skc AS (
     FROM skc_with_sales
 ),
 -- ============================================================
--- 6.1 计算 plan_post_value（基于 cum_actual），供后续累计
---     plan_post 依赖 cum_actual(N-1)，须先在 sales_cum_skc 中算出 cum_actual 再计算
+-- 6.1 计算初始 plan_post_value(基于 cum_actual,未按三期口径调整),供后续计算 plan_post_assist 和 cum_plan_pre
+--     该值为二期原逻辑 plan_post = (Q - cum_actual(N)) * ratio / (181 - N)，超周期为NULL
+--     三期口径第4节：根据 sales_plan_tag 对 plan_pre/plan_post 逻辑调整,但 plan_post_assist 需要该基础值
 -- ============================================================
 plan_post_calc_skc AS (
     SELECT
         sc.*,
-        -- plan_post(N) = (Q - cum_actual(N)) * ratio / (181 - N)，超周期为NULL
+        -- plan_post_value(二期原逻辑) = (Q - cum_actual(N)) * ratio / (181 - N)，超周期为NULL
         CASE WHEN sc.lifecycle_day BETWEEN 1 AND 180
              THEN (CAST(sc.order_qty AS DECIMAL(18,6))
                    - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
@@ -4362,18 +4538,127 @@ plan_post_calc_skc AS (
     FROM sales_cum_skc sc
 ),
 -- ============================================================
--- 6.2 累计计划销量 = 截至N-1天的 SUM(plan_post_value)，在连续日历上累计
---     超周期段 plan_post_value 为 NULL，累计结果为 NULL
+-- 6.2 计算SKC计划销量辅助字段 plan_post_assist(三期口径第3节)
+--     规则：
+--       1. sales_plan_tag='<上架时间': plan_post_assist = plan_post_value(始终为计划销量)
+--       2. sales_plan_tag='>=上架时间,<=180天': actual_qty>0 取 actual_qty,否则取 plan_post_value
+--       3. sales_plan_tag='>180天': plan_post_assist = plan_post_value(始终为计划销量)
+--     超周期段(>180天) plan_post_value 为 NULL,plan_post_assist 也为 NULL
+-- ============================================================
+plan_assist_calc_skc AS (
+    SELECT
+        pc.*,
+        CASE
+            WHEN pc.sales_plan_tag = '>=上架时间,<=180天' AND pc.lifecycle_day BETWEEN 1 AND 180 THEN
+                -- 有实际销量取实际,无实际销量取计划
+                CASE WHEN COALESCE(pc.actual_qty, 0) > 0
+                     THEN CAST(pc.actual_qty AS DECIMAL(18,6))
+                     ELSE pc.plan_post_value
+                END
+            ELSE pc.plan_post_value
+        END AS plan_post_assist
+    FROM plan_post_calc_skc pc
+),
+-- ============================================================
+-- 6.3 累计 plan_post_assist(截至N-1天),用于三期口径第4节的 cum_plan_pre
+--     cum_plan_pre(N) = SUM(plan_post_assist) 截至N-1天(不含当天N)
+--     cum_plan_pre 已含实际销量累计,公式中减去 cum_plan_pre 即可
+-- ============================================================
+cum_plan_pre_calc_skc AS (
+    SELECT
+        pa.*,
+        -- cum_plan_pre = 截至N-1天的 SUM(plan_post_assist),不含当天N
+        SUM(CASE WHEN pa.lifecycle_day BETWEEN 1 AND 180
+                 THEN pa.plan_post_assist ELSE NULL END
+           ) OVER (PARTITION BY pa.style_no ORDER BY pa.sale_date
+                   ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS cum_plan_pre
+    FROM plan_assist_calc_skc pa
+),
+-- ============================================================
+-- 6.4 三期口径第4节：按 sales_plan_tag 分3种逻辑计算 plan_pre/plan_post(超周期为0)
+--     逻辑同SKU表,SKC维度聚合
+-- ============================================================
+plan_final_calc_skc AS (
+    SELECT
+        cpc.*,
+        -- 三期口径第4节：plan_pre 按 sales_plan_tag 分3种逻辑(超周期为0)
+        CASE
+            WHEN cpc.lifecycle_day > 180 THEN CAST(0 AS DECIMAL(18,6))
+            WHEN cpc.sales_plan_tag = '<上架时间' THEN
+                (CAST(cpc.order_qty AS DECIMAL(18,6))
+                 - CAST(COALESCE(cpc.cum_plan_pre, 0) AS DECIMAL(18,6)))
+                * CASE
+                    WHEN cpc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
+                    WHEN cpc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
+                    WHEN cpc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
+                  END
+            WHEN cpc.sales_plan_tag = '>=上架时间,<=180天' THEN
+                (CAST(cpc.order_qty AS DECIMAL(18,6))
+                 - CAST(COALESCE(cpc.cum_actual, 0) AS DECIMAL(18,6))
+                 - CAST(COALESCE(cpc.cum_plan_pre, 0) AS DECIMAL(18,6)))
+                * CASE
+                    WHEN cpc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
+                    WHEN cpc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
+                    WHEN cpc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
+                  END
+            WHEN cpc.sales_plan_tag = '>180天' THEN
+                (CAST(cpc.order_qty AS DECIMAL(18,6))
+                 - CAST(COALESCE(cpc.cum_actual, 0) AS DECIMAL(18,6)))
+                * CASE
+                    WHEN cpc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
+                    WHEN cpc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
+                    WHEN cpc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
+                  END
+            ELSE NULL
+        END AS plan_pre_final,
+        -- 三期口径第4节：plan_post 按 sales_plan_tag 分3种逻辑(超周期为0)
+        CASE
+            WHEN cpc.lifecycle_day > 180 THEN CAST(0 AS DECIMAL(18,6))
+            WHEN cpc.sales_plan_tag = '<上架时间' THEN
+                (CAST(cpc.order_qty AS DECIMAL(18,6))
+                 - CAST(COALESCE(cpc.cum_plan_pre, 0) AS DECIMAL(18,6)))
+                * CASE
+                    WHEN cpc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
+                    WHEN cpc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
+                    WHEN cpc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
+                  END
+                / NULLIF(181 - cpc.lifecycle_day, 0)
+            WHEN cpc.sales_plan_tag = '>=上架时间,<=180天' THEN
+                (CAST(cpc.order_qty AS DECIMAL(18,6))
+                 - CAST(COALESCE(cpc.cum_actual, 0) AS DECIMAL(18,6))
+                 - CAST(COALESCE(cpc.cum_plan_pre, 0) AS DECIMAL(18,6)))
+                * CASE
+                    WHEN cpc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
+                    WHEN cpc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
+                    WHEN cpc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
+                  END
+                / NULLIF(181 - cpc.lifecycle_day, 0)
+            WHEN cpc.sales_plan_tag = '>180天' THEN
+                (CAST(cpc.order_qty AS DECIMAL(18,6))
+                 - CAST(COALESCE(cpc.cum_actual, 0) AS DECIMAL(18,6)))
+                * CASE
+                    WHEN cpc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
+                    WHEN cpc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
+                    WHEN cpc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
+                  END
+                / NULLIF(181 - cpc.lifecycle_day, 0)
+            ELSE NULL
+        END AS plan_post_final
+    FROM cum_plan_pre_calc_skc cpc
+),
+-- ============================================================
+-- 6.5 SKC累计计划销量 cum_plan_qty = 截至N-1天的 SUM(plan_post_final)
+--     口径与二期一致(累计 plan_post,不含当天N),超周期段累计为 NULL
 -- ============================================================
 cum_plan_skc AS (
     SELECT
         pc.*,
-        -- 累计计划销量 = 截至N-1天的 SUM(plan_post_value)，不含当天N
+        -- SKC累计计划销量 = 截至N-1天的 SUM(plan_post_final)，不含当天N
         SUM(CASE WHEN pc.lifecycle_day BETWEEN 1 AND 180
-                 THEN pc.plan_post_value ELSE NULL END
+                 THEN pc.plan_post_final ELSE NULL END
            ) OVER (PARTITION BY pc.style_no ORDER BY pc.sale_date
                    ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS cum_plan_qty
-    FROM plan_post_calc_skc pc
+    FROM plan_final_calc_skc pc
 )
 SELECT
     sc.style_no                                            AS style_no,
@@ -4398,31 +4683,24 @@ SELECT
         WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
         ELSE NULL
     END                                                    AS ratio,
+    -- 三期口径第2节：SKC销售计划标签(关联商品维表取单值,SKC维度当前时间常量)
+    sc.sales_plan_tag                                      AS sales_plan_tag,
     sc.brand                                               AS brand,
     sc.shelf_date                                          AS shelf_date,
     sc.order_qty                                           AS order_qty,
-    -- 口径6.3节：(Q - cum_actual(N)) * ratio （超周期为NULL）
-    CASE WHEN sc.lifecycle_day BETWEEN 1 AND 180
-         THEN (CAST(sc.order_qty AS DECIMAL(18,6))
-               - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
-              * CASE
-                  WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                  WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                  WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                END
-         ELSE NULL
-    END                                                    AS plan_pre,
-    -- 口径6.4节：plan_post = (Q - cum_actual(N)) * ratio / (181 - N)
-    --    cum_actual(N) = 截至N-1天的累计销量（在连续日历上计算，修复稀疏断档Bug）
-    --    超周期为NULL
-    sc.plan_post_value                                     AS plan_post,
+    -- 三期口径第4节：plan_pre 按 sales_plan_tag 分3种逻辑(超周期为0,来自 plan_pre_final)
+    sc.plan_pre_final                                      AS plan_pre,
+    -- 三期口径第4节：plan_post 按 sales_plan_tag 分3种逻辑(超周期为0,来自 plan_post_final)
+    sc.plan_post_final                                     AS plan_post,
+    -- 三期口径第3节：SKC计划销量辅助字段(有actual_qty取actual_qty,无则取plan_post_value,超周期为NULL)
+    sc.plan_post_assist                                    AS plan_post_assist,
     -- 口径6.5节：实际销售 = 第N天的 SUM(qty)，没销量的日期为0
     sc.actual_qty                                          AS actual_qty,
     sc.actual_amt                                          AS actual_amt,
     -- 累计实际销量 = 截至N-1天的 SUM(qty)
     COALESCE(sc.cum_actual, 0)                             AS cum_actual,
     COALESCE(sc.cum_actual_amt, 0)                         AS cum_actual_amt,
-    -- SKC累计计划销量 = 截至N-1天的 SUM(plan_post)，超周期段累计为 NULL
+    -- SKC累计计划销量 = 截至N-1天的 SUM(plan_post_final)，超周期段累计为 NULL
     sc.cum_plan_qty                                        AS cum_plan_qty,
     -- SKC累计计划金额 = 截至N-1天，占位0（后续补全）
     CAST(0 AS DECIMAL(18,6))                               AS cum_plan_amt,
@@ -4430,18 +4708,10 @@ SELECT
     --   超周期段 cum_plan_qty 为 NULL，结果为 NULL
     CAST(sc.cum_plan_qty AS DECIMAL(18,6))
         / NULLIF(CAST(sc.order_qty AS DECIMAL(18,6)), 0) AS should_achieve_ratio,
-    -- 口径6.6节：达成情况 = actual_qty / plan_post
+    -- 口径6.6节：达成情况 = actual_qty / plan_post(三期使用 plan_post_final)
     CASE WHEN sc.lifecycle_day BETWEEN 1 AND 180
          THEN CAST(sc.actual_qty AS DECIMAL(18,6))
-              / NULLIF(
-                  (CAST(sc.order_qty AS DECIMAL(18,6))
-                   - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
-                  * CASE
-                      WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                      WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                      WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                    END
-                  / NULLIF(181 - sc.lifecycle_day, 0), 0)
+              / NULLIF(sc.plan_post_final, 0)
          ELSE NULL
     END                                                    AS achievement_rate,
     sc.inventory_sku                                       AS inventory_sku,
@@ -4624,8 +4894,9 @@ INSERT INTO feishu_ads.ads_sku_sales_plan_180d_d (
     style_no_size, sale_date, lifecycle_day, current_lifecycle_day,
     sale_date_label, sales_phase, is_over_cycle,
     brand, style_no, size, ip, series, color_name,
-    product_name, category, tag_price, shelf_date, first_sales_date,
-    plan_pre, plan_post, plan_amt,
+    product_name, category, tag_price, rating, sales_plan_tag,
+    shelf_date, first_sales_date,
+    plan_pre, plan_post, plan_post_assist, plan_amt,
     daily_qty, daily_amt, cum_qty, cum_amt,
     cum_plan_qty, cum_plan_amt,
     achievement_rate, inventory_sku, available_inventory, daily_avg_qty_30d,
@@ -4634,14 +4905,16 @@ INSERT INTO feishu_ads.ads_sku_sales_plan_180d_d (
     `7d_achievement`, `30d_achievement`, today_plan_qty, sales_qty_ratio,
     order_qty, total_order_qty, order_qty_ratio,
     achievement_ratio, should_achieve_ratio,
-    current_cum_actual, current_achievement_ratio, current_should_achieve_ratio,
+    current_cum_actual, current_achievement_ratio, current_should_achieve_ratio, current_cum_plan_qty,
     sync_time, insert_date, update_date
 )
 WITH
--- 1. 商品维表补充属性（口径3.3/3.4/3.6节、二期口径字段SKU第5/6/7节）
+-- 1. 商品维表补充属性（口径3.3/3.4/3.6节、二期口径字段SKU第5/6/7节、三期口径第1/2节）
 --    新增取 cum_actual、sellable_days_order、order_qty_ratio，供ADS层直接使用
 --    二期口径字段SKU第7节：cum_actual作为SKU维度当前时间常量,持久化为current_cum_actual
 --    二期口径字段SKU第6节：achievement_ratio、should_achieve_ratio作为SKU维度当前时间常量,持久化为current_xxx
+--    三期口径第1节：rating从DWS商品维表透传
+--    三期口径第2节：sales_plan_tag从DWS商品维表取单值(SKU维度当前时间常量)
 product_info AS (
     SELECT
         pi.style_no_size                                   AS style_no_size,
@@ -4651,6 +4924,10 @@ product_info AS (
         pi.product_name                                    AS product_name,
         pi.category                                        AS category,
         COALESCE(pi.tag_price, 0)                          AS tag_price,
+        -- 三期口径第1节：评级字段(从DWS商品维表透传)
+        COALESCE(NULLIF(TRIM(pi.rating), ''), 'None')      AS rating,
+        -- 三期口径第2节：销售计划标签(从DWS商品维表取单值,SKU维度当前时间常量)
+        pi.sales_plan_tag                                  AS sales_plan_tag,
         pi.first_sales_date                                AS first_sales_date,
         pi.daily_avg_qty_30d                               AS daily_avg_qty_30d,
         pi.achievement_ratio                               AS achievement_ratio,
@@ -4768,12 +5045,19 @@ SELECT
     pi.product_name                                          AS product_name,
     pi.category                                              AS category,
     pi.tag_price                                             AS tag_price,
+    -- 三期口径第1节：评级字段(从DWS商品维表透传)
+    pi.rating                                                AS rating,
+    -- 三期口径第2节：销售计划标签(从DWS商品维表取单值,SKU维度当前时间常量)
+    pi.sales_plan_tag                                        AS sales_plan_tag,
     sp.shelf_date                                            AS shelf_date,
     pi.first_sales_date                                      AS first_sales_date,
     -- 口径4.3节：销售计划(销售前)
     sp.plan_pre                                              AS plan_pre,
     -- 口径4.4节：销售计划(销售后)
     sp.plan_post                                             AS plan_post,
+    -- 三期口径第3节：计划销量辅助字段(从DWS销售计划表透传)
+    --    <上架时间:始终为计划销量; >=上架时间,<=180天:有实际取实际,无则取计划; >180天:同plan_post
+    sp.plan_post_assist                                      AS plan_post_assist,
     -- 二期口径字段SKU第2节：计划金额 = 预计收款单价 * plan_post
     --    预计收款单价计算逻辑：
     --      1. ip='服配'或'篮球'：单价 = tag_price * 1.2
@@ -4890,6 +5174,9 @@ SELECT
     --    与 sp.should_achieve_ratio 同源(销售计划表),昨日无记录时返回 NULL
     CAST(lcp.cum_plan_qty AS DECIMAL(18,6))
         / NULLIF(CAST(COALESCE(sp.order_qty, 0) AS DECIMAL(18,6)), 0) AS current_should_achieve_ratio,
+    -- 三期口径第5节：current_cum_plan_qty = SKU最新累计计划销量(SKU维度当前时间常量,每天刷新)
+    --    复用 latest_cum_plan CTE 的 cum_plan_qty(昨日累计计划销量)
+    lcp.cum_plan_qty                                         AS current_cum_plan_qty,
     sp.sync_time                                             AS sync_time,
     CURRENT_TIMESTAMP()                                      AS insert_date,
     CURRENT_TIMESTAMP()                                      AS update_date
@@ -4898,7 +5185,7 @@ LEFT JOIN product_info pi   ON sp.style_no_size = pi.style_no_size
 LEFT JOIN current_metrics cm ON sp.style_no_size = cm.style_no_size
 -- 关联按style_no聚合的累计实际销量,用于计算销售比例
 LEFT JOIN sales_ratio_by_style srbs ON sp.style_no = srbs.style_no
--- 关联昨日累计计划销量,用于计算current_should_achieve_ratio
+-- 关联昨日累计计划销量,用于计算current_should_achieve_ratio和current_cum_plan_qty
 LEFT JOIN latest_cum_plan lcp ON sp.style_no_size = lcp.style_no_size;
 ```
 
@@ -4918,15 +5205,15 @@ TRUNCATE TABLE feishu_ads.ads_skc_sales_plan_180d_d;
 INSERT INTO feishu_ads.ads_skc_sales_plan_180d_d (
     style_no, sale_date, lifecycle_day, current_lifecycle_day,
     sale_date_label, sales_phase, is_over_cycle,
-    brand, ip, series, product_name, category, tag_price,
-    shelf_date, first_sales_date, plan_pre, plan_post, daily_qty, daily_amt,
+    brand, ip, series, product_name, category, tag_price, rating, sales_plan_tag,
+    shelf_date, first_sales_date, plan_pre, plan_post, plan_post_assist, daily_qty, daily_amt,
     cum_qty, cum_amt, cum_plan_qty, cum_plan_amt,
     achievement_rate, inventory_skc, available_inventory,
     daily_avg_qty_30d, sellable_days, sellable_days_order,
     yesterday_actual_qty, yesterday_achievement,
     `7d_achievement`, `30d_achievement`, today_plan_qty,
     order_qty, total_order_qty, achievement_ratio, should_achieve_ratio,
-    current_cum_actual, current_achievement_ratio, current_should_achieve_ratio,
+    current_cum_actual, current_achievement_ratio, current_should_achieve_ratio, current_cum_plan_qty,
     sync_time, insert_date, update_date
 )
 WITH
@@ -4934,6 +5221,8 @@ WITH
 --    新增取 sellable_days_order 和 lifecycle_day(作为current_lifecycle_day)，供ADS层直接使用
 --    二期口径字段SKC第5节：cum_actual作为SKC维度当前时间常量,持久化为current_cum_actual
 --    二期口径字段SKC第5节：achievement_ratio、should_achieve_ratio作为SKC维度当前时间常量,持久化为current_xxx
+--    三期口径第1节：rating从DWS SKC商品维表透传
+--    三期口径第2节：sales_plan_tag从DWS SKC商品维表取单值(SKC维度当前时间常量)
 product_info_skc AS (
     SELECT
         pi.style_no                                         AS style_no,
@@ -4943,6 +5232,10 @@ product_info_skc AS (
         pi.category                                         AS category,
         -- skc暂时没有吊牌价的逻辑
         0                                                   AS tag_price,
+        -- 三期口径第1节：评级字段(从DWS SKC商品维表透传)
+        COALESCE(NULLIF(TRIM(pi.rating), ''), 'None')       AS rating,
+        -- 三期口径第2节：销售计划标签(从DWS SKC商品维表取单值,SKC维度当前时间常量)
+        pi.sales_plan_tag                                   AS sales_plan_tag,
         pi.first_sales_date                                 AS first_sales_date,
         pi.daily_avg_qty_30d                                AS daily_avg_qty_30d,
         pi.achievement_ratio                                AS achievement_ratio,
@@ -5053,12 +5346,19 @@ SELECT
     pi.product_name                                          AS product_name,
     pi.category                                              AS category,
     pi.tag_price                                             AS tag_price,
+    -- 三期口径第1节：评级字段(从DWS SKC商品维表透传)
+    pi.rating                                                AS rating,
+    -- 三期口径第2节：销售计划标签(从DWS SKC商品维表取单值,SKC维度当前时间常量)
+    pi.sales_plan_tag                                        AS sales_plan_tag,
     sp.shelf_date                                            AS shelf_date,
     pi.first_sales_date                                      AS first_sales_date,
     -- 口径6.3节：销售计划(销售前)
     sp.plan_pre                                              AS plan_pre,
     -- 口径6.4节：销售计划(销售后)
     sp.plan_post                                             AS plan_post,
+    -- 三期口径第3节：计划销量辅助字段(从DWS SKC销售计划表透传)
+    --    <上架时间:始终为计划销量; >=上架时间,<=180天:有实际取实际,无则取计划; >180天:同plan_post
+    sp.plan_post_assist                                      AS plan_post_assist,
     -- 口径5.14/6.5节：日销量
     COALESCE(sp.actual_qty, 0)                               AS daily_qty,
     -- 口径5.15节：日金额
@@ -5113,6 +5413,9 @@ SELECT
     --    与 sp.should_achieve_ratio 同源(销售计划表),昨日无记录时返回 NULL
     CAST(lcps.cum_plan_qty AS DECIMAL(18,6))
         / NULLIF(CAST(COALESCE(sp.order_qty, 0) AS DECIMAL(18,6)), 0) AS current_should_achieve_ratio,
+    -- 三期口径第5节：current_cum_plan_qty = SKC最新累计计划销量(SKC维度当前时间常量,每天刷新)
+    --    复用 latest_cum_plan_skc CTE 的 cum_plan_qty(昨日累计计划销量)
+    lcps.cum_plan_qty                                        AS current_cum_plan_qty,
     sp.sync_time                                             AS sync_time,
     CURRENT_TIMESTAMP()                                      AS insert_date,
     CURRENT_TIMESTAMP()                                      AS update_date
@@ -5121,7 +5424,7 @@ LEFT JOIN product_info_skc pi  ON sp.style_no = pi.style_no
 LEFT JOIN current_metrics_skc cm ON sp.style_no = cm.style_no
 -- 关联SKU ADS表聚合的累计计划金额,用于SKC累计计划金额
 LEFT JOIN sku_amt_agg saa ON sp.style_no = saa.style_no AND sp.sale_date = saa.sale_date
--- 关联昨日累计计划销量,用于计算current_should_achieve_ratio
+-- 关联昨日累计计划销量,用于计算current_should_achieve_ratio和current_cum_plan_qty
 LEFT JOIN latest_cum_plan_skc lcps ON sp.style_no = lcps.style_no;
 ```
 
@@ -5147,10 +5450,61 @@ SELECT
     `series`                   AS `系列`,
     `ip`                       AS `IP`,
     `size`                     AS `尺码`,
+    -- 三期口径第6节：尺码字段排序(仅SKU维度,通过CASE WHEN将尺码映射为数字排序键)
+    CASE `size`
+        WHEN '2' THEN 1
+        WHEN '2.5' THEN 2
+        WHEN '3' THEN 3
+        WHEN '3.5' THEN 4
+        WHEN '4' THEN 5
+        WHEN '4.5' THEN 6
+        WHEN '5' THEN 7
+        WHEN '5.5' THEN 8
+        WHEN '6' THEN 9
+        WHEN '6.5' THEN 10
+        WHEN '7' THEN 11
+        WHEN '7.5' THEN 12
+        WHEN '8' THEN 13
+        WHEN '8.5' THEN 14
+        WHEN '9' THEN 15
+        WHEN '9.5' THEN 16
+        WHEN '10' THEN 17
+        WHEN '10.5' THEN 18
+        WHEN '11' THEN 19
+        WHEN '11.5' THEN 20
+        WHEN '12' THEN 21
+        WHEN '12.5' THEN 22
+        WHEN '13' THEN 23
+        WHEN '13.5' THEN 24
+        WHEN '14' THEN 25
+        WHEN '14.5' THEN 26
+        WHEN '15' THEN 27
+        WHEN '15.5' THEN 28
+        WHEN '16' THEN 29
+        WHEN '16.5' THEN 30
+        WHEN '17' THEN 31
+        WHEN '均码' THEN 32
+        WHEN 'F' THEN 33
+        WHEN 'XXS' THEN 34
+        WHEN 'XS' THEN 35
+        WHEN 'S' THEN 36
+        WHEN 'M' THEN 37
+        WHEN 'L' THEN 38
+        WHEN 'XL' THEN 39
+        WHEN '2XL' THEN 40
+        WHEN '3XL' THEN 41
+        WHEN '4XL' THEN 42
+        WHEN '5XL' THEN 43
+        ELSE 999
+    END                        AS `尺码排序`,
     `color_name`               AS `配色名`,
     `product_name`             AS `商品名称`,
     `category`                 AS `品类`,
     `tag_price`                AS `吊牌价`,
+    -- 三期口径第1节：评级字段(从ADS表透传,中文别名"评级")
+    `rating`                   AS `评级`,
+    -- 三期口径第2节：销售计划标签(从ADS表透传,中文别名"销售计划标签")
+    `sales_plan_tag`           AS `销售计划标签`,
     `shelf_date`               AS `上架日期`,
     `first_sales_date`         AS `首次销售日期`,
     -- 3. 时间维度
@@ -5169,6 +5523,8 @@ SELECT
     -- 4. 销售计划
     `plan_pre`                 AS `销售计划(销售前)`,
     `plan_post`                AS `销售计划(销售后)`,
+    -- 三期口径第3节：计划销量辅助字段(从ADS表透传,中文别名"计划销量辅助")
+    `plan_post_assist`         AS `计划销量辅助`,
     `plan_amt`                 AS `计划金额`,
     -- 5. 实际销售与累计
     `daily_qty`                AS `日销量`,
@@ -5201,7 +5557,9 @@ SELECT
     -- 10. 当前时间常量指标(SKU维度当前时间常量,每天刷新,同一SKU不同sale_date值相同)
     `current_cum_actual`       AS `当前累计实际销量`,
     `current_achievement_ratio`  AS `当前达成比例`,
-    `current_should_achieve_ratio` AS `当前应达成比例`
+    `current_should_achieve_ratio` AS `当前应达成比例`,
+    -- 三期口径第5节：当前累计计划销量(SKU维度当前时间常量,每天刷新)
+    `current_cum_plan_qty`     AS `当前累计计划销量`
 FROM feishu_ads.ads_sku_sales_plan_180d_d;
 ```
 
@@ -5224,6 +5582,10 @@ SELECT
     `product_name`             AS `商品名称`,
     `category`                 AS `品类`,
     `tag_price`                AS `吊牌价`,
+    -- 三期口径第1节：评级字段(从ADS表透传,中文别名"评级")
+    `rating`                   AS `评级`,
+    -- 三期口径第2节：销售计划标签(从ADS表透传,中文别名"销售计划标签")
+    `sales_plan_tag`           AS `销售计划标签`,
     `shelf_date`               AS `SKC上架日期`,
     `first_sales_date`         AS `SKC首次销售日期`,
     -- 3. 时间维度
@@ -5242,6 +5604,8 @@ SELECT
     -- 4. 销售计划
     `plan_pre`                 AS `销售计划(销售前)`,
     `plan_post`                AS `销售计划(销售后)`,
+    -- 三期口径第3节：计划销量辅助字段(从ADS表透传,中文别名"计划销量辅助")
+    `plan_post_assist`         AS `计划销量辅助`,
     -- 5. 实际销售与累计
     `daily_qty`                AS `日销量`,
     `daily_amt`                AS `日金额`,
@@ -5271,7 +5635,9 @@ SELECT
     -- 10. 当前时间常量指标(SKC维度当前时间常量,每天刷新,同一SKC不同sale_date值相同)
     `current_cum_actual`       AS `SKC当前累计实际销量`,
     `current_achievement_ratio`  AS `SKC当前达成比例`,
-    `current_should_achieve_ratio` AS `SKC当前应达成比例`
+    `current_should_achieve_ratio` AS `SKC当前应达成比例`,
+    -- 三期口径第5节：当前累计计划销量(SKC维度当前时间常量,每天刷新)
+    `current_cum_plan_qty`     AS `SKC当前累计计划销量`
 FROM feishu_ads.ads_skc_sales_plan_180d_d;
 ```
 
