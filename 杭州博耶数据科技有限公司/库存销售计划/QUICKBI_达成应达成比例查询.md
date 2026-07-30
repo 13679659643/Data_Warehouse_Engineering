@@ -26,24 +26,27 @@
 
 ## 二、占位符说明
 
-| 占位符名 | 变量类型 | 筛选模式 | 说明 |
-|---------|---------|---------|------|
-| `style_no_size` | 文本 | 多选 | SKU编码筛选，**关键切换字段**（有值用SKU表，无值用SKC表） |
-| `style_no` | 文本 | 多选 | SKC编码/款号筛选 |
-| `ip` | 文本 | 多选 | IP筛选 |
-| `series` | 文本 | 多选 | 系列筛选 |
-| `sales_phase` | 文本 | 多选 | 销售阶段筛选（新品期/热销期/清货期/超周期） |
-| `sale_date_label` | 文本 | 多选 | 销售日期标签筛选（第N天/超周期） |
-| `sales_plan_tag` | 文本 | 多选 | 销售计划标签筛选 |
-| `rating` | 文本 | 多选 | 评级筛选 |
-| `sale_date` | 日期-年月日 | 范围 | 日期范围筛选（起止日期），用 `.get(0)` 取起始、`.get(1)` 取结束 |
+| 占位符名 | 占位符类型 | 变量类型 | 筛选模式 | 说明 |
+|---------|-----------|---------|---------|------|
+| `style_no_size` | **值占位符** | 文本 | 多选 | SKU编码筛选，**关键切换字段**（有值用SKU表，无值用SKC表，**必须用值占位符**） |
+| `style_no` | 表达式占位符 | 文本 | 多选 | SKC编码/款号筛选，支持包含/排除 |
+| `ip` | 表达式占位符 | 文本 | 多选 | IP筛选，支持包含/排除 |
+| `series` | 表达式占位符 | 文本 | 多选 | 系列筛选，支持包含/排除 |
+| `sales_phase` | 表达式占位符 | 文本 | 多选 | 销售阶段筛选（新品期/热销期/清货期/超周期），支持包含/排除 |
+| `sale_date_label` | 表达式占位符 | 文本 | 多选 | 销售日期标签筛选（第N天/超周期），支持包含/排除 |
+| `sales_plan_tag` | 表达式占位符 | 文本 | 多选 | 销售计划标签筛选，支持包含/排除 |
+| `rating` | 表达式占位符 | 文本 | 多选 | 评级筛选，支持包含/排除 |
+| `sale_date` | **值占位符** | 日期-年月日 | 范围 | 日期范围筛选（起止日期），用 `.get(0)` 取起始、`.get(1)` 取结束 |
 
 ### QuickBI 占位符配置要点
 
-1. **style_no_size 占位符**：**不设置默认值**（或设置为空），用于判断是否传值
-2. **sale_date 占位符**：日期范围控件，类型选"日期-年月日"，使用 `.get(0)` 和 `.get(1)` 取起止日期
-3. **其他占位符**：建议在 QuickBI 占位符管理中设置"全局生效"的默认值，确保未传值时返回全部数据
-4. **多选 IN 语法**：`field IN ('$val{占位符名}')`，QuickBI 会自动将多选值展开为 `'v1','v2','v3'`
+1. **style_no_size 占位符**：**值占位符**，**不设置默认值**（或设置为空），用于判断是否传值（表切换依赖 `IN ('')` 返回空的行为）
+2. **sale_date 占位符**：**值占位符**，日期范围控件，类型选"日期-年月日"，使用 `.get(0)` 和 `.get(1)` 取起止日期
+3. **其他7个占位符（style_no/ip/series/sales_phase/sale_date_label/sales_plan_tag/rating）**：**表达式占位符**，支持用户在查询控件中切换"包含/排除"模式
+4. **表达式占位符的默认值**：表达式占位符的默认值需填写完整的表达式，比如 `ip = "None"`（设置一个能命中全部数据的默认表达式，或留空由用户主动选择）
+5. **值占位符与表达式占位符的差异**：
+   - 值占位符 `'$val{ph}'`：只传值，固定用 `IN` 展开，**不支持"排除"操作**
+   - 表达式占位符 `$expr{field :ph}`：传完整条件（含操作符），**支持"排除"操作**（如 `NOT IN ('超周期')`）
 
 ---
 
@@ -62,6 +65,10 @@
 -- 多选汇总逻辑：
 --   daily_qty / plan_post：按 SKU/SKC 分组求和（不同 sale_date 值不同，需聚合）
 --   order_qty：SKU/SKC 维度常量，先按 SKU/SKC 分组取 MAX 去重，再求和
+-- 占位符类型说明：
+--   style_no_size：值占位符（表切换依赖 IN ('') 返回空的行为，必须用值占位符）
+--   sale_date：值占位符（日期范围语法 .get(0)/.get(1)，必须用值占位符）
+--   其他7个字段：表达式占位符（支持用户切换"包含/排除"模式）
 -- ============================================================
 
 WITH 
@@ -79,13 +86,13 @@ SKU_DATA AS (
         -- 日期范围筛选（起止日期）
         AND sale_date >= '$val{sale_date.get(0)}'               -- 起始日期
         AND sale_date <= '$val{sale_date.get(1)}'               -- 结束日期
-        AND ip IN ('$val{ip}')                                   -- IP多选筛选
-        AND series IN ('$val{series}')                           -- 系列多选筛选
-        AND style_no IN ('$val{style_no}')                       -- 款号/SKC编码多选筛选
-        AND sales_phase IN ('$val{sales_phase}')                 -- 销售阶段多选筛选
-        AND sale_date_label IN ('$val{sale_date_label}')         -- 销售日期标签多选筛选
-        AND sales_plan_tag IN ('$val{sales_plan_tag}')           -- 销售计划标签多选筛选
-        AND rating IN ('$val{rating}')                           -- 评级多选筛选
+        AND $expr{ip :ip}                                            -- IP筛选(表达式占位符,支持包含/排除)
+        AND $expr{series :series}                                    -- 系列筛选(表达式占位符,支持包含/排除)
+        AND $expr{style_no :style_no}                                -- 款号/SKC编码筛选(表达式占位符,支持包含/排除)
+        AND $expr{sales_phase :sales_phase}                          -- 销售阶段筛选(表达式占位符,支持包含/排除)
+        AND $expr{sale_date_label :sale_date_label}                  -- 销售日期标签筛选(表达式占位符,支持包含/排除)
+        AND $expr{sales_plan_tag :sales_plan_tag}                    -- 销售计划标签筛选(表达式占位符,支持包含/排除)
+        AND $expr{rating :rating}                                    -- 评级筛选(表达式占位符,支持包含/排除)
     GROUP BY style_no_size
 ),
 
@@ -112,13 +119,13 @@ SKC_DATA AS (
     -- 日期范围筛选（起止日期）
     AND sale_date >= '$val{sale_date.get(0)}'                    -- 起始日期
     AND sale_date <= '$val{sale_date.get(1)}'                    -- 结束日期
-    AND ip IN ('$val{ip}')                                       -- IP多选筛选
-    AND series IN ('$val{series}')                               -- 系列多选筛选
-    AND style_no IN ('$val{style_no}')                           -- 款号/SKC编码多选筛选
-    AND sales_phase IN ('$val{sales_phase}')                     -- 销售阶段多选筛选
-    AND sale_date_label IN ('$val{sale_date_label}')             -- 销售日期标签多选筛选
-    AND sales_plan_tag IN ('$val{sales_plan_tag}')               -- 销售计划标签多选筛选
-    AND rating IN ('$val{rating}')                               -- 评级多选筛选
+    AND $expr{ip :ip}                                            -- IP筛选(表达式占位符,支持包含/排除)
+    AND $expr{series :series}                                    -- 系列筛选(表达式占位符,支持包含/排除)
+    AND $expr{style_no :style_no}                                -- 款号/SKC编码筛选(表达式占位符,支持包含/排除)
+    AND $expr{sales_phase :sales_phase}                          -- 销售阶段筛选(表达式占位符,支持包含/排除)
+    AND $expr{sale_date_label :sale_date_label}                  -- 销售日期标签筛选(表达式占位符,支持包含/排除)
+    AND $expr{sales_plan_tag :sales_plan_tag}                    -- 销售计划标签筛选(表达式占位符,支持包含/排除)
+    AND $expr{rating :rating}                                    -- 评级筛选(表达式占位符,支持包含/排除)
     GROUP BY style_no
 ),
 
@@ -238,10 +245,10 @@ AND sale_date <= '$val{sale_date.get(1)}' -- 结束日期
 ### 5.2 配置查询控件
 
 1. 创建仪表板，添加该数据集
-2. 添加查询控件，绑定 9 个占位符
-3. **style_no_size**：多选，**不设置默认值**
-4. **sale_date**：日期范围控件，类型选"日期-年月日"
-5. **其他占位符**：多选，建议设置默认值为"全选"
+2. 添加查询控件，绑定 9 个占位符（见第二章表格）
+3. **style_no_size**：值占位符，多选，**不设置默认值**（表切换依赖）
+4. **sale_date**：值占位符，日期范围控件，类型选"日期-年月日"
+5. **其他7个占位符**：表达式占位符，多选，支持用户切换"包含/排除"模式；建议设置一个能命中全部数据的默认表达式（如 `1=1`）
 
 ### 5.3 配置图表
 
@@ -253,10 +260,11 @@ AND sale_date <= '$val{sale_date.get(1)}' -- 结束日期
 
 ## 六、注意事项
 
-1. **style_no_size 占位符不要设置默认值**：否则 NOT EXISTS 判断会失效，始终走 SKU 表
-2. **sale_date 占位符需配置日期范围控件**：类型选"日期-年月日"，使用 `.get(0)` 和 `.get(1)` 取起止日期
-3. **其他占位符建议设置默认值**：避免未传值时 `IN ('')` 返回空数据
-4. **UNION ALL 合并安全性**：SKU_DATA 和 SKC_DATA 在同一时刻只有一方有数据，另一方为空，UNION ALL 不会产生重复
-5. **NULL 处理**：order_qty = 0 时，比例为 NULL（避免除零错误）
-6. **order_qty 去重逻辑**：order_qty 是 SKU/SKC 维度常量，先 MAX 去重再 SUM，避免 180 倍放大
-7. **daily_qty / plan_post 聚合逻辑**：这两个字段按 sale_date 累加，时间段筛选后直接 SUM 即可，无需额外去重
+1. **style_no_size 占位符必须用值占位符且不设置默认值**：表切换逻辑依赖 `IN ('$val{style_no_size}')` 未传值时变成 `IN ('')` 返回空的行为；若改用表达式占位符，未传值时的行为不同，会破坏 NOT EXISTS 切换逻辑
+2. **sale_date 占位符必须用值占位符**：日期范围语法 `.get(0)`/`.get(1)` 仅值占位符支持
+3. **其他7个占位符使用表达式占位符**：支持用户在查询控件中切换"包含/排除"模式，解决值占位符只能 IN、无法 NOT IN 的局限
+4. **表达式占位符的默认值需为完整表达式**：如 `ip = "None"` 或 `1=1`，不能只写值
+5. **UNION ALL 合并安全性**：SKU_DATA 和 SKC_DATA 在同一时刻只有一方有数据，另一方为空，UNION ALL 不会产生重复
+6. **NULL 处理**：order_qty = 0 时，比例为 NULL（避免除零错误）
+7. **order_qty 去重逻辑**：order_qty 是 SKU/SKC 维度常量，先 MAX 去重再 SUM，避免 180 倍放大
+8. **daily_qty / plan_post 聚合逻辑**：这两个字段按 sale_date 累加，时间段筛选后直接 SUM 即可，无需额外去重
