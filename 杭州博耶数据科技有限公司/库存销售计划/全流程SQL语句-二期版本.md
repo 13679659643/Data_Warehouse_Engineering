@@ -765,6 +765,7 @@ CREATE TABLE IF NOT EXISTS feishu_dws.dws_sku_sales_plan_180d_d (
     `cum_actual`           BIGINT          COMMENT "累计实际销量(截至N-1天的SUM(qty))",
     `cum_actual_amt`       DECIMAL(18,6)   COMMENT "累计实际金额(截至N-1天的SUM(amt))",
     `cum_plan_qty`         DECIMAL(18,6)   COMMENT "累计计划销量(截至N-1天,SUM(plan_post)窗口累计)",
+    `cum_plan_post_assist` DECIMAL(18,6)   COMMENT "累计计划销量辅助(截至N-1天,SUM(plan_post_assist)窗口累计,用于ADS计划金额计算)",
     `cum_plan_amt`         DECIMAL(18,6)   COMMENT "累计计划金额(截至N-1天,占位0)",
     `should_achieve_ratio` DECIMAL(18,6)   COMMENT "应达成比例(累计计划销量/订货数量Q,基于截至N-1天的cum_plan_qty)",
     -- 7. 达成情况
@@ -822,6 +823,7 @@ CREATE TABLE IF NOT EXISTS feishu_dws.dws_skc_sales_plan_180d_d (
     `cum_actual`           BIGINT          COMMENT "累计实际销量(截至N-1天)",
     `cum_actual_amt`       DECIMAL(18,6)   COMMENT "累计实际金额(截至N-1天)",
     `cum_plan_qty`         DECIMAL(18,6)   COMMENT "SKC累计计划销量(截至N-1天,SUM(plan_post)窗口累计)",
+    `cum_plan_post_assist` DECIMAL(18,6)   COMMENT "SKC累计计划销量辅助(截至N-1天,SUM(plan_post_assist)窗口累计,用于ADS计划金额计算)",
     `cum_plan_amt`         DECIMAL(18,6)   COMMENT "SKC累计计划金额(截至N-1天,占位0)",
     `should_achieve_ratio` DECIMAL(18,6)   COMMENT "SKC应达成比例(累计计划销量/订货数量Q,基于截至N-1天的cum_plan_qty)",
     -- 7. 达成情况
@@ -950,7 +952,7 @@ CREATE TABLE IF NOT EXISTS feishu_ads.ads_sku_sales_plan_180d_d (
     `plan_post`                DECIMAL(18,6)   COMMENT "销售计划(销售后)(三期口径第4节：按sales_plan_tag分3种逻辑,引入cum_plan_pre)",
     -- 4.1 计划销量辅助字段(三期口径第3节：有actual_qty取actual_qty,无则取plan_post,超周期同plan_post)
     `plan_post_assist`         DECIMAL(18,6)   COMMENT "计划销量辅助(有actual_qty取actual_qty,无则取plan_post,超周期同plan_post)",
-    `plan_amt`                 DECIMAL(18,6)   COMMENT "计划金额(预计收款单价*plan_post,ip=服配/篮球单价=tag_price*1.2,其他单价=销售美金*6.8)",
+    `plan_amt`                 DECIMAL(18,6)   COMMENT "计划金额(预计收款单价*plan_post_assist,ip=服配/篮球单价=tag_price*1.2,其他单价=销售美金*6.8)",
     -- 5. 实际销售与累计
     `daily_qty`                BIGINT          COMMENT "日销量(第N天核心4渠道SUM(qty))",
     `daily_amt`                DECIMAL(18,6)   COMMENT "日金额(第N天核心4渠道SUM(amt))",
@@ -958,7 +960,8 @@ CREATE TABLE IF NOT EXISTS feishu_ads.ads_sku_sales_plan_180d_d (
     `cum_amt`                  DECIMAL(18,6)   COMMENT "累计金额(截至当天N的累计)",
     -- 5.1 累计计划(截至N-1天,来自DWS销售计划表)
     `cum_plan_qty`             DECIMAL(18,6)   COMMENT "累计计划销量(截至N-1天,SUM(plan_post)窗口累计)",
-    `cum_plan_amt`             DECIMAL(18,6)   COMMENT "累计计划金额(截至N-1天,预计收款单价*cum_plan_qty)",
+    `cum_plan_post_assist`     DECIMAL(18,6)   COMMENT "累计计划销量辅助(截至N-1天,SUM(plan_post_assist)窗口累计,来自DWS销售计划表)",
+    `cum_plan_amt`             DECIMAL(18,6)   COMMENT "累计计划金额(截至N-1天,预计收款单价*cum_plan_post_assist)",
     -- 6. 达成情况
     `achievement_rate`         DECIMAL(18,6)   COMMENT "达成情况(daily_qty/plan_post,plan_post=0时NULL)",
     -- 7. 库存指标
@@ -986,6 +989,8 @@ CREATE TABLE IF NOT EXISTS feishu_ads.ads_sku_sales_plan_180d_d (
     `current_should_achieve_ratio` DECIMAL(18,6) COMMENT "当前应达成比例(取DWS商品维表should_achieve_ratio,SKU维度当前时间常量,每天刷新)",
     -- 10.1 当前累计计划销量(三期口径第5节：取销售计划表昨日cum_plan_qty,SKU维度当前时间常量,每天刷新)
     `current_cum_plan_qty`      DECIMAL(18,6) COMMENT "SKU当前累计计划销量(取销售计划表昨日cum_plan_qty,SKU维度当前时间常量,每天刷新,同一SKU不同sale_date值相同)",
+    -- 10.2 当前累计计划销量辅助(三期口径第5节：取销售计划表昨日cum_plan_post_assist,SKU维度当前时间常量,每天刷新)
+    `current_cum_plan_post_assist` DECIMAL(18,6) COMMENT "SKU当前累计计划销量辅助(取销售计划表昨日cum_plan_post_assist,SKU维度当前时间常量,每天刷新,同一SKU不同sale_date值相同)",
     -- 11. 技术字段
     `sync_time`                DATETIME        COMMENT "ODS同步时间",
     `insert_date`              DATETIME        COMMENT "ADS记录插入时间(ETL写入)",
@@ -1043,6 +1048,7 @@ CREATE TABLE IF NOT EXISTS feishu_ads.ads_skc_sales_plan_180d_d (
     `cum_amt`                  DECIMAL(18,6)   COMMENT "累计金额(截至当天N的累计)",
     -- 5.1 累计计划(截至N-1天,来自DWS销售计划表)
     `cum_plan_qty`             DECIMAL(18,6)   COMMENT "SKC累计计划销量(截至N-1天,SUM(plan_post)窗口累计)",
+    `cum_plan_post_assist`     DECIMAL(18,6)   COMMENT "SKC累计计划销量辅助(截至N-1天,SUM(plan_post_assist)窗口累计,来自DWS销售计划表)",
     `cum_plan_amt`             DECIMAL(18,6)   COMMENT "SKC累计计划金额(截至N-1天,占位0)",
     -- 6. 达成情况
     `achievement_rate`         DECIMAL(18,6)   COMMENT "达成情况(daily_qty/plan_post)",
@@ -1069,6 +1075,8 @@ CREATE TABLE IF NOT EXISTS feishu_ads.ads_skc_sales_plan_180d_d (
     `current_should_achieve_ratio` DECIMAL(18,6) COMMENT "当前SKC应达成比例(取DWS商品维表should_achieve_ratio,SKC维度当前时间常量,每天刷新)",
     -- 10.1 当前累计计划销量(三期口径第5节：取销售计划表昨日cum_plan_qty,SKC维度当前时间常量,每天刷新)
     `current_cum_plan_qty`      DECIMAL(18,6) COMMENT "SKC当前累计计划销量(取销售计划表昨日cum_plan_qty,SKC维度当前时间常量,每天刷新,同一SKC不同sale_date值相同)",
+    -- 10.2 当前累计计划销量辅助(三期口径第5节：取销售计划表昨日cum_plan_post_assist,SKC维度当前时间常量,每天刷新)
+    `current_cum_plan_post_assist` DECIMAL(18,6) COMMENT "SKC当前累计计划销量辅助(取销售计划表昨日cum_plan_post_assist,SKC维度当前时间常量,每天刷新,同一SKC不同sale_date值相同)",
     -- 11. 技术字段
     `sync_time`                DATETIME        COMMENT "ODS同步时间",
     `insert_date`              DATETIME        COMMENT "ADS记录插入时间(ETL写入)",
@@ -4695,14 +4703,14 @@ INSERT INTO feishu_ads.ads_sku_sales_plan_180d_d (
     shelf_date, first_sales_date,
     plan_pre, plan_post, plan_post_assist, plan_amt,
     daily_qty, daily_amt, cum_qty, cum_amt,
-    cum_plan_qty, cum_plan_amt,
+    cum_plan_qty, cum_plan_post_assist, cum_plan_amt,
     achievement_rate, inventory_sku, available_inventory, daily_avg_qty_30d,
     sellable_days, sellable_days_order,
     yesterday_actual_qty, yesterday_achievement,
     `7d_achievement`, `30d_achievement`, today_plan_qty, sales_qty_ratio,
     order_qty, total_order_qty, order_qty_ratio,
     achievement_ratio, should_achieve_ratio,
-    current_cum_actual, current_achievement_ratio, current_should_achieve_ratio, current_cum_plan_qty,
+    current_cum_actual, current_achievement_ratio, current_should_achieve_ratio, current_cum_plan_qty, current_cum_plan_post_assist,
     sync_time, insert_date, update_date
 )
 WITH
@@ -4805,10 +4813,12 @@ sales_ratio_by_style AS (
 --    口径：cum_plan_qty 为截至N-1天的累计计划销量，取昨日(DATE_SUB(CURRENT_DATE(),1))对应行
 --    昨日无记录时（如上架第1天、超周期SKU）取 NULL，应达成比例返回 NULL
 --    与 sp.should_achieve_ratio 同源(销售计划表),保证口径一致
+--    三期口径第5节：同时取 cum_plan_post_assist 用于 current_cum_plan_post_assist
 latest_cum_plan AS (
     SELECT
         sp.style_no_size                                   AS style_no_size,
-        sp.cum_plan_qty                                    AS cum_plan_qty
+        sp.cum_plan_qty                                    AS cum_plan_qty,
+        sp.cum_plan_post_assist                            AS cum_plan_post_assist
     FROM feishu_dws.dws_sku_sales_plan_180d_d sp
     WHERE sp.sale_date = DATE_SUB(CURRENT_DATE(), 1)
 )
@@ -4855,19 +4865,20 @@ SELECT
     -- 三期口径第3节：计划销量辅助字段(从DWS销售计划表透传)
     --    <上架时间:始终为计划销量; >=上架时间,<=180天:有实际取实际,无则取计划; >180天:同plan_post
     sp.plan_post_assist                                      AS plan_post_assist,
-    -- 二期口径字段SKU第2节：计划金额 = 预计收款单价 * plan_post
+    -- 二期口径字段SKU第2节：计划金额 = 预计收款单价 * plan_post_assist
+    --    口径调整: 改用 plan_post_assist(有实际取实际,无则取计划) 替代 plan_post
     --    预计收款单价计算逻辑：
     --      1. ip='服配'或'篮球'：单价 = tag_price * 1.2
     --      2. 其他ip：单价 = 销售美金 * 6.8
     --         销售美金按吊牌价精确映射(非8个值则为0)：
     --         199→59, 299→59, 599→99, 699→119, 899→149, 999→159, 1199→199, 1399→225
-    --    超周期段plan_post为NULL，计划金额为NULL
+    --    超周期段plan_post_assist为NULL/0，计划金额为NULL
     CASE
         WHEN sp.lifecycle_day BETWEEN 1 AND 180 THEN
             CASE
                 WHEN pi.ip IN ('服配', '篮球') THEN
                     CAST(pi.tag_price AS DECIMAL(18,6)) * CAST(1.2 AS DECIMAL(18,6))
-                    * CAST(sp.plan_post AS DECIMAL(18,6))
+                    * CAST(sp.plan_post_assist AS DECIMAL(18,6))
                 ELSE
                     CAST(
                         CASE pi.tag_price
@@ -4882,7 +4893,7 @@ SELECT
                             ELSE 0
                         END AS DECIMAL(18,6)
                     ) * CAST(6.8 AS DECIMAL(18,6))
-                    * CAST(sp.plan_post AS DECIMAL(18,6))
+                    * CAST(sp.plan_post_assist AS DECIMAL(18,6))
             END
         ELSE NULL
     END                                                       AS plan_amt,
@@ -4896,15 +4907,18 @@ SELECT
     COALESCE(sp.cum_actual_amt, 0) + COALESCE(sp.actual_amt, 0) AS cum_amt,
     -- 累计计划销量(截至N-1天)：直接取DWS销售计划表的 cum_plan_qty
     sp.cum_plan_qty                                         AS cum_plan_qty,
-    -- 二期口径字段SKU第3节：累计计划金额 = 预计收款单价 * cum_plan_qty
+    -- 累计计划销量辅助(截至N-1天)：直接取DWS销售计划表的 cum_plan_post_assist
+    sp.cum_plan_post_assist                                 AS cum_plan_post_assist,
+    -- 二期口径字段SKU第3节：累计计划金额 = 预计收款单价 * cum_plan_post_assist
+    --    口径调整: 改用 cum_plan_post_assist 替代 cum_plan_qty
     --    预计收款单价计算逻辑同 plan_amt
-    --    超周期段cum_plan_qty为NULL，累计计划金额为NULL
+    --    超周期段cum_plan_post_assist为NULL，累计计划金额为NULL
     CASE
         WHEN sp.lifecycle_day BETWEEN 1 AND 180 THEN
             CASE
                 WHEN pi.ip IN ('服配', '篮球') THEN
                     CAST(pi.tag_price AS DECIMAL(18,6)) * CAST(1.2 AS DECIMAL(18,6))
-                    * CAST(sp.cum_plan_qty AS DECIMAL(18,6))
+                    * CAST(sp.cum_plan_post_assist AS DECIMAL(18,6))
                 ELSE
                     CAST(
                         CASE pi.tag_price
@@ -4919,7 +4933,7 @@ SELECT
                             ELSE 0
                         END AS DECIMAL(18,6)
                     ) * CAST(6.8 AS DECIMAL(18,6))
-                    * CAST(sp.cum_plan_qty AS DECIMAL(18,6))
+                    * CAST(sp.cum_plan_post_assist AS DECIMAL(18,6))
             END
         ELSE NULL
     END                                                       AS cum_plan_amt,
@@ -4974,6 +4988,9 @@ SELECT
     -- 三期口径第5节：current_cum_plan_qty = SKU最新累计计划销量(SKU维度当前时间常量,每天刷新)
     --    复用 latest_cum_plan CTE 的 cum_plan_qty(昨日累计计划销量)
     lcp.cum_plan_qty                                         AS current_cum_plan_qty,
+    -- 三期口径第5节：current_cum_plan_post_assist = SKU最新累计计划销量辅助(SKU维度当前时间常量,每天刷新)
+    --    复用 latest_cum_plan CTE 的 cum_plan_post_assist(昨日累计计划销量辅助)
+    lcp.cum_plan_post_assist                                 AS current_cum_plan_post_assist,
     sp.sync_time                                             AS sync_time,
     CURRENT_TIMESTAMP()                                      AS insert_date,
     CURRENT_TIMESTAMP()                                      AS update_date
@@ -5004,13 +5021,14 @@ INSERT INTO feishu_ads.ads_skc_sales_plan_180d_d (
     sale_date_label, sales_phase, is_over_cycle,
     brand, ip, series, product_name, category, tag_price, rating, sales_plan_tag,
     shelf_date, first_sales_date, plan_pre, plan_post, plan_post_assist, daily_qty, daily_amt,
-    cum_qty, cum_amt, cum_plan_qty, cum_plan_amt,
+    cum_qty, cum_amt, cum_plan_qty, cum_plan_post_assist, cum_plan_amt,
     achievement_rate, inventory_skc, available_inventory,
     daily_avg_qty_30d, sellable_days, sellable_days_order,
     yesterday_actual_qty, yesterday_achievement,
     `7d_achievement`, `30d_achievement`, today_plan_qty,
     order_qty, total_order_qty, achievement_ratio, should_achieve_ratio,
-    current_cum_actual, current_achievement_ratio, current_should_achieve_ratio, current_cum_plan_qty,
+    current_cum_actual, current_achievement_ratio, current_should_achieve_ratio,
+    current_cum_plan_qty, current_cum_plan_post_assist,
     sync_time, insert_date, update_date
 )
 WITH
@@ -5109,10 +5127,12 @@ current_metrics_skc AS (
 --    口径：cum_plan_qty 为截至N-1天的累计计划销量，取昨日(DATE_SUB(CURRENT_DATE(),1))对应行
 --    昨日无记录时（如上架第1天、超周期SKC）取 NULL，应达成比例返回 NULL
 --    与 sp.should_achieve_ratio 同源(销售计划表),保证口径一致
+--    三期口径第5节：同时取 cum_plan_post_assist 用于持久化 current_cum_plan_post_assist
 latest_cum_plan_skc AS (
     SELECT
         sp.style_no                                         AS style_no,
-        sp.cum_plan_qty                                     AS cum_plan_qty
+        sp.cum_plan_qty                                     AS cum_plan_qty,
+        sp.cum_plan_post_assist                             AS cum_plan_post_assist
     FROM feishu_dws.dws_skc_sales_plan_180d_d sp
     WHERE sp.sale_date = DATE_SUB(CURRENT_DATE(), 1)
 )
@@ -5166,6 +5186,8 @@ SELECT
     COALESCE(sp.cum_actual_amt, 0) + COALESCE(sp.actual_amt, 0) AS cum_amt,
     -- SKC累计计划销量(截至N-1天)：直接取DWS销售计划表的 cum_plan_qty
     sp.cum_plan_qty                                         AS cum_plan_qty,
+    -- 三期口径第3节：SKC累计计划销量辅助(截至N-1天,来自DWS销售计划表)
+    sp.cum_plan_post_assist                                 AS cum_plan_post_assist,
     -- SKC累计计划金额(截至N-1天)：从SKU ADS表按 style_no + sale_date 聚合 SUM(cum_plan_amt)
     -- 口径：SKC表的cum_plan_amt为SKU表by style_no的聚合
     COALESCE(saa.cum_plan_amt_sum, 0)                       AS cum_plan_amt,
@@ -5213,6 +5235,9 @@ SELECT
     -- 三期口径第5节：current_cum_plan_qty = SKC最新累计计划销量(SKC维度当前时间常量,每天刷新)
     --    复用 latest_cum_plan_skc CTE 的 cum_plan_qty(昨日累计计划销量)
     lcps.cum_plan_qty                                        AS current_cum_plan_qty,
+    -- 三期口径第5节：current_cum_plan_post_assist = SKC最新累计计划销量辅助(SKC维度当前时间常量,每天刷新)
+    --    复用 latest_cum_plan_skc CTE 的 cum_plan_post_assist(昨日累计计划销量辅助)
+    lcps.cum_plan_post_assist                                AS current_cum_plan_post_assist,
     sp.sync_time                                             AS sync_time,
     CURRENT_TIMESTAMP()                                      AS insert_date,
     CURRENT_TIMESTAMP()                                      AS update_date
@@ -5329,6 +5354,7 @@ SELECT
     `cum_qty`                  AS `累计销量`,
     `cum_amt`                  AS `累计金额`,
     `cum_plan_qty`             AS `累计计划销量`,
+    `cum_plan_post_assist`     AS `累计计划销量辅助`,
     `cum_plan_amt`             AS `累计计划金额`,
     -- 6. 达成情况
     `achievement_rate`         AS `达成情况`,
@@ -5356,7 +5382,9 @@ SELECT
     `current_achievement_ratio`  AS `当前达成比例`,
     `current_should_achieve_ratio` AS `当前应达成比例`,
     -- 三期口径第5节：当前累计计划销量(SKU维度当前时间常量,每天刷新)
-    `current_cum_plan_qty`     AS `当前累计计划销量`
+    `current_cum_plan_qty`     AS `当前累计计划销量`,
+    -- 三期口径第5节：当前累计计划销量辅助(SKU维度当前时间常量,每天刷新)
+    `current_cum_plan_post_assist` AS `当前累计计划销量辅助`
 FROM feishu_ads.ads_sku_sales_plan_180d_d;
 ```
 
@@ -5409,6 +5437,7 @@ SELECT
     `cum_qty`                  AS `累计销量`,
     `cum_amt`                  AS `累计金额`,
     `cum_plan_qty`             AS `SKC累计计划销量`,
+    `cum_plan_post_assist`     AS `SKC累计计划销量辅助`,
     `cum_plan_amt`             AS `SKC累计计划金额`,
     -- 6. 达成情况
     `achievement_rate`         AS `达成情况`,
@@ -5434,7 +5463,9 @@ SELECT
     `current_achievement_ratio`  AS `SKC当前达成比例`,
     `current_should_achieve_ratio` AS `SKC当前应达成比例`,
     -- 三期口径第5节：当前累计计划销量(SKC维度当前时间常量,每天刷新)
-    `current_cum_plan_qty`     AS `SKC当前累计计划销量`
+    `current_cum_plan_qty`     AS `SKC当前累计计划销量`,
+    -- 三期口径第5节：当前累计计划销量辅助(SKC维度当前时间常量,每天刷新)
+    `current_cum_plan_post_assist` AS `SKC当前累计计划销量辅助`
 FROM feishu_ads.ads_skc_sales_plan_180d_d;
 ```
 
