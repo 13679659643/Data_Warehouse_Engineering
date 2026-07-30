@@ -4018,14 +4018,13 @@ TRUNCATE TABLE feishu_dws.dws_sku_sales_plan_180d_d;
 
 INSERT INTO feishu_dws.dws_sku_sales_plan_180d_d (
     style_no_size, sale_date, lifecycle_day, sale_date_label,
-    sales_cycle_label, ratio, sales_plan_tag, brand, style_no, size, shelf_date,
-    order_qty, plan_pre, plan_post, plan_post_assist, actual_qty, actual_amt,
+    sales_cycle_label, ratio, brand, style_no, size, shelf_date,
+    order_qty, plan_pre, plan_post, actual_qty, actual_amt,
     cum_actual, cum_actual_amt, cum_plan_qty, cum_plan_amt, should_achieve_ratio, achievement_rate,
     inventory_sku, available_inventory, sellable_days,
     sync_time, insert_date, update_date
 )
--- 三期口径第3/4节: 递归CTE计算plan_post/plan_pre/plan_post_assist(依赖前N-1天无实际销量天数的plan_post累计)
-WITH RECURSIVE
+WITH
 -- ============================================================
 -- 1. 销售明细按 style_no_size + sales_date 聚合（核心4渠道）
 --    稀疏表：只有有销量的日期才有记录
@@ -4077,8 +4076,6 @@ sku_calendar AS (
         p.available_inventory                                 AS available_inventory,
         p.order_qty                                           AS order_qty,
         p.sync_time                                           AS sync_time,
-        -- 三期口径第2节：销售计划标签(从商品维表取单值,SKU维度当前时间常量,同一SKU所有行值相同)
-        p.sales_plan_tag                                      AS sales_plan_tag,
         -- 上市第N天 = 偏移量 + 1
         gs.day_offset + 1                                     AS lifecycle_day,
         -- 具体的日期 = shelf_date + 偏移量
@@ -4128,7 +4125,6 @@ sales_cum AS (
         inventory_sku,
         available_inventory,
         sync_time,
-        sales_plan_tag,
         -- 1 PRECEDING：往前数1个人（也就是昨天）。
         -- UNBOUNDED PRECEDING：一直往前到队伍的最开头（也就是上市第一天）。
         -- 30 PRECEDING：从当前位置往前数30个人（也就是往前推30天）。
@@ -4143,304 +4139,39 @@ sales_cum AS (
     FROM sku_with_sales
 ),
 -- ============================================================
--- 6.1 三期口径第3/4节：递归计算 plan_post / plan_pre / plan_post_assist / cum_is_not_0_actual_sum_plan_post
---     核心难点: 递归依赖
---       - 第N天的 plan_post 依赖于 cum_is_not_0_actual_sum_plan_post(N) = 前N-1天中"无实际销量天数的plan_post累计"
---       - 而该累计又依赖于前N-1天的 plan_post,无法用普通窗口函数,必须用 WITH RECURSIVE 逐天递推
---     三种 sales_plan_tag 逻辑:
---       情况1 '<上架时间': 实际销量始终为0
---         plan_post(N) = (Q - 0 - cum_is_not_0_sum(N)) * ratio / (181-N), 超周期为0
---         plan_post_assist = plan_post (始终为计划销量)
---       情况2 '>=上架时间,<=180天':
---         plan_post(N) = (Q - cum_actual(N) - cum_is_not_0_sum(N)) * ratio / (181-N), 超周期为0
---         plan_post_assist = actual_qty>0 ? actual_qty : plan_post
---       情况3 '>180天': 1~180天用二期原逻辑,超周期段 plan_post=(Q-cum_actual)*1
---         plan_post(N) = (Q - cum_actual(N)) * ratio / (181-N), 超周期 plan_post=(Q-cum_actual)*1
---         plan_post_assist = plan_post (始终为计划销量)
---     cum_is_not_0_sum(N): 前N-1天中 actual_qty=0 的天数的 plan_post 累计(不含当天N)
---     注: 情况3的1~180天不依赖 cum_is_not_0_sum,可直接用窗口函数; 但为统一递归框架,仍纳入递归
---         情况3超周期段 plan_post=(Q-cum_actual)*1,不影响1~180天的 cum_plan_qty
+-- 6.1 计算 plan_post_value（基于 cum_actual），供后续累计
+--     plan_post 依赖 cum_actual(N-1)，须先在 sales_cum 中算出 cum_actual 再计算
 -- ============================================================
--- 6.1.1 递归基础: 每个SKU的第1天(lifecycle_day=1),无前一天累计
-plan_recursive_base AS (
+plan_post_calc AS (
     SELECT
-        sc.style_no_size,
-        sc.sale_date,
-        sc.lifecycle_day,
-        sc.actual_qty,
-        sc.actual_amt,
-        sc.brand,
-        sc.style_no,
-        sc.size,
-        sc.shelf_date,
-        sc.order_qty,
-        sc.inventory_sku,
-        sc.available_inventory,
-        sc.sync_time,
-        sc.sales_plan_tag,
-        sc.cum_actual,
-        sc.cum_actual_amt,
-        sc.rolling_30d_qty,
-        -- 第1天: cum_is_not_0_sum = 0 (无前一天)
-        CAST(0 AS DECIMAL(18,6))                                AS cum_is_not_0_sum,
-        -- 三期口径第4节: plan_pre 按 sales_plan_tag 分3种逻辑
-        CASE
-            WHEN sc.lifecycle_day > 180 THEN CAST(0 AS DECIMAL(18,6))
-            WHEN sc.sales_plan_tag IN ('<上架时间', '>=上架时间,<=180天') THEN
-                (CAST(sc.order_qty AS DECIMAL(18,6))
-                 - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6))
-                 - CAST(0 AS DECIMAL(18,6)))
-                * CASE
-                    WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                  END
-            WHEN sc.sales_plan_tag = '>180天' THEN
-                (CAST(sc.order_qty AS DECIMAL(18,6))
-                 - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
-                * CASE
-                    WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                    ELSE CAST(1.0 AS DECIMAL(18,6))
-                  END
-            ELSE NULL
-        END AS plan_pre_final,
-        -- 三期口径第4节: plan_post 按 sales_plan_tag 分3种逻辑
-        CASE
-            WHEN sc.lifecycle_day > 180 THEN
-                -- 情况3超周期段: (Q-cum_actual)*1
-                (CAST(sc.order_qty AS DECIMAL(18,6))
-                 - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
-                * CAST(1.0 AS DECIMAL(18,6))
-            WHEN sc.sales_plan_tag IN ('<上架时间', '>=上架时间,<=180天') THEN
-                (CAST(sc.order_qty AS DECIMAL(18,6))
-                 - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6))
-                 - CAST(0 AS DECIMAL(18,6)))
-                * CASE
-                    WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                  END
-                / NULLIF(181 - sc.lifecycle_day, 0)
-            WHEN sc.sales_plan_tag = '>180天' THEN
-                (CAST(sc.order_qty AS DECIMAL(18,6))
-                 - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
-                * CASE
-                    WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                  END
-                / NULLIF(181 - sc.lifecycle_day, 0)
-            ELSE NULL
-        END AS plan_post_final,
-        -- 三期口径第3节: plan_post_assist
-        CASE
-            WHEN sc.lifecycle_day > 180 THEN
-                -- 超周期段: 情况1/2 plan_post=0,情况3 plan_post=(Q-cum_actual)*1
-                -- plan_post_assist 始终等于 plan_post,所以直接取 plan_post_final 逻辑
-                CASE WHEN sc.sales_plan_tag = '>180天' THEN
-                    (CAST(sc.order_qty AS DECIMAL(18,6))
-                     - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
-                    * CAST(1.0 AS DECIMAL(18,6))
-                ELSE CAST(0 AS DECIMAL(18,6))
-                END
-            WHEN sc.sales_plan_tag = '>=上架时间,<=180天' THEN
-                -- 情况2: 有实际取实际,无实际取计划
-                CASE WHEN COALESCE(sc.actual_qty, 0) > 0
-                     THEN CAST(sc.actual_qty AS DECIMAL(18,6))
-                     ELSE
-                        (CAST(sc.order_qty AS DECIMAL(18,6))
-                         - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6))
-                         - CAST(0 AS DECIMAL(18,6)))
-                        * CASE
-                            WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                            WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                            WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                          END
-                        / NULLIF(181 - sc.lifecycle_day, 0)
-                END
-            ELSE
-                -- 情况1/3 1~180天: 始终为计划销量
-                CASE WHEN sc.lifecycle_day BETWEEN 1 AND 180
-                     THEN
-                        (CAST(sc.order_qty AS DECIMAL(18,6))
-                         - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6))
-                         - CAST(0 AS DECIMAL(18,6)))
-                        * CASE
-                            WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                            WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                            WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                          END
-                        / NULLIF(181 - sc.lifecycle_day, 0)
-                     ELSE NULL
-                END
-        END AS plan_post_assist
+        sc.*,
+        -- plan_post(N) = (Q - cum_actual(N)) * ratio / (181 - N)，超周期为NULL
+        CASE WHEN sc.lifecycle_day BETWEEN 1 AND 180
+             THEN (CAST(sc.order_qty AS DECIMAL(18,6))
+                   - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
+                  * CASE
+                      WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
+                      WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
+                      WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
+                    END
+                  / NULLIF(181 - sc.lifecycle_day, 0)
+             ELSE NULL
+        END AS plan_post_value
     FROM sales_cum sc
-    WHERE sc.lifecycle_day = 1
-),
--- 6.1.2 递归步骤: 第N天(N>=2)从前一天(N-1)递推
---       cum_is_not_0_sum(N) = cum_is_not_0_sum(N-1) + (CASE WHEN 前一天actual_qty=0 THEN 前一天plan_post ELSE 0 END)
-plan_recursive_step AS (
-    SELECT
-        sc.style_no_size,
-        sc.sale_date,
-        sc.lifecycle_day,
-        sc.actual_qty,
-        sc.actual_amt,
-        sc.brand,
-        sc.style_no,
-        sc.size,
-        sc.shelf_date,
-        sc.order_qty,
-        sc.inventory_sku,
-        sc.available_inventory,
-        sc.sync_time,
-        sc.sales_plan_tag,
-        sc.cum_actual,
-        sc.cum_actual_amt,
-        sc.rolling_30d_qty,
-        -- 递归核心: 前N-1天中无实际销量天数的plan_post累计
-        --   = 前一天的 cum_is_not_0_sum + (CASE WHEN 前一天actual_qty=0 THEN 前一天plan_post ELSE 0 END)
-        CAST(
-            COALESCE(prev.cum_is_not_0_sum, 0)
-            + CASE WHEN COALESCE(prev.actual_qty, 0) = 0 AND prev.lifecycle_day BETWEEN 1 AND 180
-                   THEN COALESCE(prev.plan_post_final, 0)
-                   ELSE 0
-              END
-        AS DECIMAL(18,6))                                        AS cum_is_not_0_sum,
-        -- 三期口径第4节: plan_pre 按 sales_plan_tag 分3种逻辑
-        CASE
-            WHEN sc.lifecycle_day > 180 THEN CAST(0 AS DECIMAL(18,6))
-            WHEN sc.sales_plan_tag IN ('<上架时间', '>=上架时间,<=180天') THEN
-                (CAST(sc.order_qty AS DECIMAL(18,6))
-                 - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6))
-                 - CAST(COALESCE(prev.cum_is_not_0_sum, 0) AS DECIMAL(18,6))
-                 - CASE WHEN COALESCE(prev.actual_qty, 0) = 0 AND prev.lifecycle_day BETWEEN 1 AND 180
-                        THEN COALESCE(prev.plan_post_final, 0) ELSE 0 END)
-                * CASE
-                    WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                  END
-            WHEN sc.sales_plan_tag = '>180天' THEN
-                (CAST(sc.order_qty AS DECIMAL(18,6))
-                 - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
-                * CASE
-                    WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                    ELSE CAST(1.0 AS DECIMAL(18,6))
-                  END
-            ELSE NULL
-        END AS plan_pre_final,
-        -- 三期口径第4节: plan_post 按 sales_plan_tag 分3种逻辑
-        CASE
-            WHEN sc.lifecycle_day > 180 THEN
-                -- 情况3超周期段: (Q-cum_actual)*1
-                (CAST(sc.order_qty AS DECIMAL(18,6))
-                 - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
-                * CAST(1.0 AS DECIMAL(18,6))
-            WHEN sc.sales_plan_tag IN ('<上架时间', '>=上架时间,<=180天') THEN
-                (CAST(sc.order_qty AS DECIMAL(18,6))
-                 - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6))
-                 - CAST(COALESCE(prev.cum_is_not_0_sum, 0) AS DECIMAL(18,6))
-                 - CASE WHEN COALESCE(prev.actual_qty, 0) = 0 AND prev.lifecycle_day BETWEEN 1 AND 180
-                        THEN COALESCE(prev.plan_post_final, 0) ELSE 0 END)
-                * CASE
-                    WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                  END
-                / NULLIF(181 - sc.lifecycle_day, 0)
-            WHEN sc.sales_plan_tag = '>180天' THEN
-                (CAST(sc.order_qty AS DECIMAL(18,6))
-                 - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
-                * CASE
-                    WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                  END
-                / NULLIF(181 - sc.lifecycle_day, 0)
-            ELSE NULL
-        END AS plan_post_final,
-        -- 三期口径第3节: plan_post_assist
-        CASE
-            WHEN sc.lifecycle_day > 180 THEN
-                -- 超周期段: 始终为计划销量
-                (CAST(sc.order_qty AS DECIMAL(18,6))
-                 - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
-                * CAST(1.0 AS DECIMAL(18,6))
-            WHEN sc.sales_plan_tag = '>=上架时间,<=180天' THEN
-                -- 情况2: 有实际取实际,无实际取计划(用当天plan_post_final)
-                CASE WHEN COALESCE(sc.actual_qty, 0) > 0
-                     THEN CAST(sc.actual_qty AS DECIMAL(18,6))
-                     ELSE
-                        (CAST(sc.order_qty AS DECIMAL(18,6))
-                         - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6))
-                         - CAST(COALESCE(prev.cum_is_not_0_sum, 0) AS DECIMAL(18,6))
-                         - CASE WHEN COALESCE(prev.actual_qty, 0) = 0 AND prev.lifecycle_day BETWEEN 1 AND 180
-                                THEN COALESCE(prev.plan_post_final, 0) ELSE 0 END)
-                        * CASE
-                            WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                            WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                            WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                          END
-                        / NULLIF(181 - sc.lifecycle_day, 0)
-                END
-            ELSE
-                -- 情况1/3 1~180天: 始终为计划销量
-                CASE WHEN sc.lifecycle_day BETWEEN 1 AND 180
-                     THEN
-                        (CAST(sc.order_qty AS DECIMAL(18,6))
-                         - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6))
-                         - CAST(COALESCE(prev.cum_is_not_0_sum, 0) AS DECIMAL(18,6))
-                         - CASE WHEN COALESCE(prev.actual_qty, 0) = 0 AND prev.lifecycle_day BETWEEN 1 AND 180
-                                THEN COALESCE(prev.plan_post_final, 0) ELSE 0 END)
-                        * CASE
-                            WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                            WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                            WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                          END
-                        / NULLIF(181 - sc.lifecycle_day, 0)
-                     ELSE NULL
-                END
-        END AS plan_post_assist
-    FROM sales_cum sc
-    INNER JOIN plan_recursive_step prev
-        ON sc.style_no_size = prev.style_no_size
-       AND sc.sale_date = DATE_ADD(prev.sale_date, INTERVAL 1 DAY)
-    WHERE sc.lifecycle_day > 1
-),
--- 6.1.3 合并递归基础和递归步骤的结果
-plan_recursive AS (
-    SELECT * FROM plan_recursive_base
-    UNION ALL
-    SELECT * FROM plan_recursive_step
 ),
 -- ============================================================
--- 6.2 累计计划销量 cum_plan_qty = 截至N-1天的 SUM(plan_post_final)
---     口径: 累计 plan_post(不含当天N),1~180天有效;超周期段保持第180天值(不再累加)
+-- 6.2 累计计划销量 = 截至N-1天的 SUM(plan_post_value)，在连续日历上累计
+--     超周期段 plan_post_value 为 NULL，累计结果为 NULL
 -- ============================================================
 cum_plan AS (
     SELECT
         pc.*,
-        -- 累计计划销量 = 截至N-1天的 SUM(plan_post_final),不含当天N
-        -- 1~180天: 滚动累计(不含当天N)
-        -- 超周期段(>180天): 保持第180天值 = SUM(lifecycle_day<=180 的 plan_post_final)
-        CASE WHEN pc.lifecycle_day BETWEEN 1 AND 180 THEN
-            SUM(CASE WHEN pc.lifecycle_day BETWEEN 1 AND 180
-                     THEN pc.plan_post_final ELSE 0 END
-               ) OVER (PARTITION BY pc.style_no_size ORDER BY pc.sale_date
-                       ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)
-        ELSE
-            -- 超周期段: 取该SKU所有1~180天plan_post的总和(即第180天的累计值)
-            SUM(CASE WHEN pc.lifecycle_day BETWEEN 1 AND 180
-                     THEN pc.plan_post_final ELSE 0 END
-               ) OVER (PARTITION BY pc.style_no_size
-                       ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
-        END AS cum_plan_qty
-    FROM plan_recursive pc
+        -- 累计计划销量 = 截至N-1天的 SUM(plan_post_value)，不含当天N
+        SUM(CASE WHEN pc.lifecycle_day BETWEEN 1 AND 180
+                 THEN pc.plan_post_value ELSE NULL END
+           ) OVER (PARTITION BY pc.style_no_size ORDER BY pc.sale_date
+                   ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS cum_plan_qty
+    FROM plan_post_calc pc
 )
 SELECT
     sc.style_no_size                                       AS style_no_size,
@@ -4465,26 +4196,34 @@ SELECT
         WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
         ELSE NULL
     END                                                    AS ratio,
-    -- 三期口径第2节：销售计划标签(关联商品维表取单值,SKU维度当前时间常量)
-    sc.sales_plan_tag                                      AS sales_plan_tag,
     sc.brand                                               AS brand,
     sc.style_no                                            AS style_no,
     sc.size                                                AS size,
     sc.shelf_date                                          AS shelf_date,
     sc.order_qty                                           AS order_qty,
-    -- 三期口径第4节：plan_pre 按 sales_plan_tag 分3种逻辑(超周期为0,来自 plan_pre_final)
-    sc.plan_pre_final                                      AS plan_pre,
-    -- 三期口径第4节：plan_post 按 sales_plan_tag 分3种逻辑(超周期为0,来自 plan_post_final)
-    sc.plan_post_final                                     AS plan_post,
-    -- 三期口径第3节：计划销量辅助字段(有actual_qty取actual_qty,无则取plan_post_value,超周期为NULL)
-    sc.plan_post_assist                                    AS plan_post_assist,
+    -- 口径4.3节：plan_pre = (Q - cum_actual(N)) * ratio （超周期为NULL）
+    CASE WHEN sc.lifecycle_day BETWEEN 1 AND 180
+         THEN (CAST(sc.order_qty AS DECIMAL(18,6))
+               - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
+              * CASE
+                  WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
+                  WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
+                  WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
+                END
+         ELSE NULL
+    END                                                    AS plan_pre,
+    -- 口径4.4节：plan_post = (Q - cum_actual(N)) * ratio / (181 - N)
+    --    cum_actual(N) = 截至N-1天的累计销量（在连续日历上计算，修复稀疏断档Bug）
+    --    分母 = 180 - sold_days = 180 - (N-1) = 181 - N
+    --    超周期为NULL
+    sc.plan_post_value                                     AS plan_post,
     -- 口径4.5节：实际销售 = 第N天的 SUM(qty)，没销量的日期为0
     sc.actual_qty                                          AS actual_qty,
     sc.actual_amt                                          AS actual_amt,
     -- 累计实际销量 = 截至N-1天的 SUM(qty)
     COALESCE(sc.cum_actual, 0)                             AS cum_actual,
     COALESCE(sc.cum_actual_amt, 0)                          AS cum_actual_amt,
-    -- 累计计划销量 = 截至N-1天的 SUM(plan_post_final)，超周期段累计为 NULL
+    -- 累计计划销量 = 截至N-1天的 SUM(plan_post)，超周期段累计为 NULL
     sc.cum_plan_qty                                        AS cum_plan_qty,
     -- 累计计划金额 = 截至N-1天，占位0（后续补全）
     CAST(0 AS DECIMAL(18,6))                               AS cum_plan_amt,
@@ -4492,10 +4231,18 @@ SELECT
     --   超周期段 cum_plan_qty 为 NULL，结果为 NULL
     CAST(sc.cum_plan_qty AS DECIMAL(18,6))
         / NULLIF(CAST(sc.order_qty AS DECIMAL(18,6)), 0)   AS should_achieve_ratio,
-    -- 口径4.6节：达成情况 = actual_qty / plan_post(三期使用 plan_post_final)
+    -- 口径4.6节：达成情况 = actual_qty / plan_post
     CASE WHEN sc.lifecycle_day BETWEEN 1 AND 180
          THEN CAST(sc.actual_qty AS DECIMAL(18,6))
-              / NULLIF(sc.plan_post_final, 0)
+              / NULLIF(
+                  (CAST(sc.order_qty AS DECIMAL(18,6))
+                   - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
+                  * CASE
+                      WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
+                      WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
+                      WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
+                    END
+                  / NULLIF(181 - sc.lifecycle_day, 0), 0)
          ELSE NULL
     END                                                    AS achievement_rate,
     sc.inventory_sku                                       AS inventory_sku,
@@ -4534,7 +4281,7 @@ ORDER BY sc.style_no_size, sc.sale_date;
 
 ```SQL
 -- ============================================================
--- ETL: feishu_dws.dws_skc_sales_plan_180d_d
+-- ETL: feishu_dws.dws_skc_sales_plan_180d_d 410208
 -- 粒度：style_no + sale_date
 -- 日期补齐：每个SKC从 shelf_date 到 全局最晚shelf_date+180天
 -- 渠道：韦德4核心渠道
@@ -4549,14 +4296,13 @@ TRUNCATE TABLE feishu_dws.dws_skc_sales_plan_180d_d;
 
 INSERT INTO feishu_dws.dws_skc_sales_plan_180d_d (
     style_no, sale_date, lifecycle_day, sale_date_label,
-    sales_cycle_label, ratio, sales_plan_tag, brand, shelf_date,
-    order_qty, plan_pre, plan_post, plan_post_assist, actual_qty, actual_amt,
+    sales_cycle_label, ratio, brand, shelf_date,
+    order_qty, plan_pre, plan_post, actual_qty, actual_amt,
     cum_actual, cum_actual_amt, cum_plan_qty, cum_plan_amt, should_achieve_ratio, achievement_rate,
     inventory_sku, available_inventory, sellable_days,
     sync_time, insert_date, update_date
 )
--- 三期口径第3/4节: 递归CTE计算plan_post/plan_pre/plan_post_assist(依赖前N-1天无实际销量天数的plan_post累计)
-WITH RECURSIVE
+WITH
 -- ============================================================
 -- 1. SKC 销售明细按 style_no + sales_date 聚合（核心4渠道）
 --    稀疏表：只有有销量的日期才有记录
@@ -4603,8 +4349,6 @@ skc_calendar AS (
         p.available_inventory                                 AS available_inventory,
         p.order_qty                                           AS order_qty,
         p.sync_time                                           AS sync_time,
-        -- 三期口径第2节：SKC销售计划标签(从商品维表取单值,SKC维度当前时间常量,同一SKC所有行值相同)
-        p.sales_plan_tag                                      AS sales_plan_tag,
         -- 上市第N天 = 偏移量 + 1
         gs.day_offset + 1                                     AS lifecycle_day,
         -- 具体的日期 = shelf_date + 偏移量
@@ -4650,7 +4394,6 @@ sales_cum_skc AS (
         inventory_sku,
         available_inventory,
         sync_time,
-        sales_plan_tag,
         -- 1 PRECEDING：往前数1个人（也就是昨天）。
         -- UNBOUNDED PRECEDING：一直往前到队伍的最开头（也就是上市第一天）。
         -- 30 PRECEDING：从当前位置往前数30个人（也就是往前推30天）。
@@ -4665,298 +4408,39 @@ sales_cum_skc AS (
     FROM skc_with_sales
 ),
 -- ============================================================
--- 6.1 三期口径第3/4节：递归计算 plan_post / plan_pre / plan_post_assist / cum_is_not_0_actual_sum_plan_post
---     核心难点: 递归依赖(同SKU表逻辑,维度改为 style_no)
---       - 第N天的 plan_post 依赖于 cum_is_not_0_actual_sum_plan_post(N) = 前N-1天中"无实际销量天数的plan_post累计"
---       - 而该累计又依赖于前N-1天的 plan_post,无法用普通窗口函数,必须用 WITH RECURSIVE 逐天递推
---     三种 sales_plan_tag 逻辑:
---       情况1 '<上架时间': 实际销量始终为0
---         plan_post(N) = (Q - 0 - cum_is_not_0_sum(N)) * ratio / (181-N), 超周期为0
---         plan_post_assist = plan_post (始终为计划销量)
---       情况2 '>=上架时间,<=180天':
---         plan_post(N) = (Q - cum_actual(N) - cum_is_not_0_sum(N)) * ratio / (181-N), 超周期为0
---         plan_post_assist = actual_qty>0 ? actual_qty : plan_post
---       情况3 '>180天': 1~180天用二期原逻辑,超周期段 plan_post=(Q-cum_actual)*1
---         plan_post(N) = (Q - cum_actual(N)) * ratio / (181-N), 超周期 plan_post=(Q-cum_actual)*1
---         plan_post_assist = plan_post (始终为计划销量)
---     cum_is_not_0_sum(N): 前N-1天中 actual_qty=0 的天数的 plan_post 累计(不含当天N)
+-- 6.1 计算 plan_post_value（基于 cum_actual），供后续累计
+--     plan_post 依赖 cum_actual(N-1)，须先在 sales_cum_skc 中算出 cum_actual 再计算
 -- ============================================================
--- 6.1.1 递归基础: 每个SKC的第1天(lifecycle_day=1),无前一天累计
-plan_recursive_base_skc AS (
+plan_post_calc_skc AS (
     SELECT
-        sc.style_no,
-        sc.sale_date,
-        sc.lifecycle_day,
-        sc.actual_qty,
-        sc.actual_amt,
-        sc.brand,
-        sc.shelf_date,
-        sc.order_qty,
-        sc.inventory_sku,
-        sc.available_inventory,
-        sc.sync_time,
-        sc.sales_plan_tag,
-        sc.cum_actual,
-        sc.cum_actual_amt,
-        sc.rolling_30d_qty,
-        -- 第1天: cum_is_not_0_sum = 0 (无前一天)
-        CAST(0 AS DECIMAL(18,6))                                AS cum_is_not_0_sum,
-        -- 三期口径第4节: plan_pre 按 sales_plan_tag 分3种逻辑
-        CASE
-            WHEN sc.lifecycle_day > 180 THEN CAST(0 AS DECIMAL(18,6))
-            WHEN sc.sales_plan_tag IN ('<上架时间', '>=上架时间,<=180天') THEN
-                (CAST(sc.order_qty AS DECIMAL(18,6))
-                 - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6))
-                 - CAST(0 AS DECIMAL(18,6)))
-                * CASE
-                    WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                  END
-            WHEN sc.sales_plan_tag = '>180天' THEN
-                (CAST(sc.order_qty AS DECIMAL(18,6))
-                 - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
-                * CASE
-                    WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                    ELSE CAST(1.0 AS DECIMAL(18,6))
-                  END
-            ELSE NULL
-        END AS plan_pre_final,
-        -- 三期口径第4节: plan_post 按 sales_plan_tag 分3种逻辑
-        CASE
-            WHEN sc.lifecycle_day > 180 THEN
-                -- 情况3超周期段: (Q-cum_actual)*1
-                (CAST(sc.order_qty AS DECIMAL(18,6))
-                 - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
-                * CAST(1.0 AS DECIMAL(18,6))
-            WHEN sc.sales_plan_tag IN ('<上架时间', '>=上架时间,<=180天') THEN
-                (CAST(sc.order_qty AS DECIMAL(18,6))
-                 - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6))
-                 - CAST(0 AS DECIMAL(18,6)))
-                * CASE
-                    WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                  END
-                / NULLIF(181 - sc.lifecycle_day, 0)
-            WHEN sc.sales_plan_tag = '>180天' THEN
-                (CAST(sc.order_qty AS DECIMAL(18,6))
-                 - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
-                * CASE
-                    WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                  END
-                / NULLIF(181 - sc.lifecycle_day, 0)
-            ELSE NULL
-        END AS plan_post_final,
-        -- 三期口径第3节: plan_post_assist
-        CASE
-            WHEN sc.lifecycle_day > 180 THEN
-                -- 超周期段: 情况1/2 plan_post=0,情况3 plan_post=(Q-cum_actual)*1
-                -- plan_post_assist 始终等于 plan_post,所以直接取 plan_post_final 逻辑
-                CASE WHEN sc.sales_plan_tag = '>180天' THEN
-                    (CAST(sc.order_qty AS DECIMAL(18,6))
-                     - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
-                    * CAST(1.0 AS DECIMAL(18,6))
-                ELSE CAST(0 AS DECIMAL(18,6))
-                END
-            WHEN sc.sales_plan_tag = '>=上架时间,<=180天' THEN
-                -- 情况2: 有实际取实际,无实际取计划
-                CASE WHEN COALESCE(sc.actual_qty, 0) > 0
-                     THEN CAST(sc.actual_qty AS DECIMAL(18,6))
-                     ELSE
-                        (CAST(sc.order_qty AS DECIMAL(18,6))
-                         - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6))
-                         - CAST(0 AS DECIMAL(18,6)))
-                        * CASE
-                            WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                            WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                            WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                          END
-                        / NULLIF(181 - sc.lifecycle_day, 0)
-                END
-            ELSE
-                -- 情况1/3 1~180天: 始终为计划销量
-                CASE WHEN sc.lifecycle_day BETWEEN 1 AND 180
-                     THEN
-                        (CAST(sc.order_qty AS DECIMAL(18,6))
-                         - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6))
-                         - CAST(0 AS DECIMAL(18,6)))
-                        * CASE
-                            WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                            WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                            WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                          END
-                        / NULLIF(181 - sc.lifecycle_day, 0)
-                     ELSE NULL
-                END
-        END AS plan_post_assist
+        sc.*,
+        -- plan_post(N) = (Q - cum_actual(N)) * ratio / (181 - N)，超周期为NULL
+        CASE WHEN sc.lifecycle_day BETWEEN 1 AND 180
+             THEN (CAST(sc.order_qty AS DECIMAL(18,6))
+                   - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
+                  * CASE
+                      WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
+                      WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
+                      WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
+                    END
+                  / NULLIF(181 - sc.lifecycle_day, 0)
+             ELSE NULL
+        END AS plan_post_value
     FROM sales_cum_skc sc
-    WHERE sc.lifecycle_day = 1
-),
--- 6.1.2 递归步骤: 第N天(N>=2)从前一天(N-1)递推
---       cum_is_not_0_sum(N) = cum_is_not_0_sum(N-1) + (CASE WHEN 前一天actual_qty=0 THEN 前一天plan_post ELSE 0 END)
-plan_recursive_step_skc AS (
-    SELECT
-        sc.style_no,
-        sc.sale_date,
-        sc.lifecycle_day,
-        sc.actual_qty,
-        sc.actual_amt,
-        sc.brand,
-        sc.shelf_date,
-        sc.order_qty,
-        sc.inventory_sku,
-        sc.available_inventory,
-        sc.sync_time,
-        sc.sales_plan_tag,
-        sc.cum_actual,
-        sc.cum_actual_amt,
-        sc.rolling_30d_qty,
-        -- 递归核心: 前N-1天中无实际销量天数的plan_post累计
-        --   = 前一天的 cum_is_not_0_sum + (CASE WHEN 前一天actual_qty=0 THEN 前一天plan_post ELSE 0 END)
-        CAST(
-            COALESCE(prev.cum_is_not_0_sum, 0)
-            + CASE WHEN COALESCE(prev.actual_qty, 0) = 0 AND prev.lifecycle_day BETWEEN 1 AND 180
-                   THEN COALESCE(prev.plan_post_final, 0)
-                   ELSE 0
-              END
-        AS DECIMAL(18,6))                                        AS cum_is_not_0_sum,
-        -- 三期口径第4节: plan_pre 按 sales_plan_tag 分3种逻辑
-        CASE
-            WHEN sc.lifecycle_day > 180 THEN CAST(0 AS DECIMAL(18,6))
-            WHEN sc.sales_plan_tag IN ('<上架时间', '>=上架时间,<=180天') THEN
-                (CAST(sc.order_qty AS DECIMAL(18,6))
-                 - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6))
-                 - CAST(COALESCE(prev.cum_is_not_0_sum, 0) AS DECIMAL(18,6))
-                 - CASE WHEN COALESCE(prev.actual_qty, 0) = 0 AND prev.lifecycle_day BETWEEN 1 AND 180
-                        THEN COALESCE(prev.plan_post_final, 0) ELSE 0 END)
-                * CASE
-                    WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                  END
-            WHEN sc.sales_plan_tag = '>180天' THEN
-                (CAST(sc.order_qty AS DECIMAL(18,6))
-                 - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
-                * CASE
-                    WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                    ELSE CAST(1.0 AS DECIMAL(18,6))
-                  END
-            ELSE NULL
-        END AS plan_pre_final,
-        -- 三期口径第4节: plan_post 按 sales_plan_tag 分3种逻辑
-        CASE
-            WHEN sc.lifecycle_day > 180 THEN
-                -- 情况3超周期段: (Q-cum_actual)*1
-                (CAST(sc.order_qty AS DECIMAL(18,6))
-                 - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
-                * CAST(1.0 AS DECIMAL(18,6))
-            WHEN sc.sales_plan_tag IN ('<上架时间', '>=上架时间,<=180天') THEN
-                (CAST(sc.order_qty AS DECIMAL(18,6))
-                 - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6))
-                 - CAST(COALESCE(prev.cum_is_not_0_sum, 0) AS DECIMAL(18,6))
-                 - CASE WHEN COALESCE(prev.actual_qty, 0) = 0 AND prev.lifecycle_day BETWEEN 1 AND 180
-                        THEN COALESCE(prev.plan_post_final, 0) ELSE 0 END)
-                * CASE
-                    WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                  END
-                / NULLIF(181 - sc.lifecycle_day, 0)
-            WHEN sc.sales_plan_tag = '>180天' THEN
-                (CAST(sc.order_qty AS DECIMAL(18,6))
-                 - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
-                * CASE
-                    WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                    WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                  END
-                / NULLIF(181 - sc.lifecycle_day, 0)
-            ELSE NULL
-        END AS plan_post_final,
-        -- 三期口径第3节: plan_post_assist
-        CASE
-            WHEN sc.lifecycle_day > 180 THEN
-                -- 超周期段: 始终为计划销量
-                (CAST(sc.order_qty AS DECIMAL(18,6))
-                 - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
-                * CAST(1.0 AS DECIMAL(18,6))
-            WHEN sc.sales_plan_tag = '>=上架时间,<=180天' THEN
-                -- 情况2: 有实际取实际,无实际取计划(用当天plan_post_final)
-                CASE WHEN COALESCE(sc.actual_qty, 0) > 0
-                     THEN CAST(sc.actual_qty AS DECIMAL(18,6))
-                     ELSE
-                        (CAST(sc.order_qty AS DECIMAL(18,6))
-                         - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6))
-                         - CAST(COALESCE(prev.cum_is_not_0_sum, 0) AS DECIMAL(18,6))
-                         - CASE WHEN COALESCE(prev.actual_qty, 0) = 0 AND prev.lifecycle_day BETWEEN 1 AND 180
-                                THEN COALESCE(prev.plan_post_final, 0) ELSE 0 END)
-                        * CASE
-                            WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                            WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                            WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                          END
-                        / NULLIF(181 - sc.lifecycle_day, 0)
-                END
-            ELSE
-                -- 情况1/3 1~180天: 始终为计划销量
-                CASE WHEN sc.lifecycle_day BETWEEN 1 AND 180
-                     THEN
-                        (CAST(sc.order_qty AS DECIMAL(18,6))
-                         - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6))
-                         - CAST(COALESCE(prev.cum_is_not_0_sum, 0) AS DECIMAL(18,6))
-                         - CASE WHEN COALESCE(prev.actual_qty, 0) = 0 AND prev.lifecycle_day BETWEEN 1 AND 180
-                                THEN COALESCE(prev.plan_post_final, 0) ELSE 0 END)
-                        * CASE
-                            WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
-                            WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
-                            WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
-                          END
-                        / NULLIF(181 - sc.lifecycle_day, 0)
-                     ELSE NULL
-                END
-        END AS plan_post_assist
-    FROM sales_cum_skc sc
-    INNER JOIN plan_recursive_step_skc prev
-        ON sc.style_no = prev.style_no
-       AND sc.sale_date = DATE_ADD(prev.sale_date, INTERVAL 1 DAY)
-    WHERE sc.lifecycle_day > 1
-),
--- 6.1.3 合并递归基础和递归步骤的结果
-plan_recursive_skc AS (
-    SELECT * FROM plan_recursive_base_skc
-    UNION ALL
-    SELECT * FROM plan_recursive_step_skc
 ),
 -- ============================================================
--- 6.2 SKC累计计划销量 cum_plan_qty = 截至N-1天的 SUM(plan_post_final)
---     口径: 累计 plan_post(不含当天N),1~180天有效;超周期段保持第180天值(不再累加)
+-- 6.2 累计计划销量 = 截至N-1天的 SUM(plan_post_value)，在连续日历上累计
+--     超周期段 plan_post_value 为 NULL，累计结果为 NULL
 -- ============================================================
 cum_plan_skc AS (
     SELECT
         pc.*,
-        -- 累计计划销量 = 截至N-1天的 SUM(plan_post_final),不含当天N
-        -- 1~180天: 滚动累计(不含当天N)
-        -- 超周期段(>180天): 保持第180天值 = SUM(lifecycle_day<=180 的 plan_post_final)
-        CASE WHEN pc.lifecycle_day BETWEEN 1 AND 180 THEN
-            SUM(CASE WHEN pc.lifecycle_day BETWEEN 1 AND 180
-                     THEN pc.plan_post_final ELSE 0 END
-               ) OVER (PARTITION BY pc.style_no ORDER BY pc.sale_date
-                       ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)
-        ELSE
-            -- 超周期段: 取该SKC所有1~180天plan_post的总和(即第180天的累计值)
-            SUM(CASE WHEN pc.lifecycle_day BETWEEN 1 AND 180
-                     THEN pc.plan_post_final ELSE 0 END
-               ) OVER (PARTITION BY pc.style_no
-                       ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING)
-        END AS cum_plan_qty
-    FROM plan_recursive_skc pc
+        -- 累计计划销量 = 截至N-1天的 SUM(plan_post_value)，不含当天N
+        SUM(CASE WHEN pc.lifecycle_day BETWEEN 1 AND 180
+                 THEN pc.plan_post_value ELSE NULL END
+           ) OVER (PARTITION BY pc.style_no ORDER BY pc.sale_date
+                   ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING) AS cum_plan_qty
+    FROM plan_post_calc_skc pc
 )
 SELECT
     sc.style_no                                            AS style_no,
@@ -4981,24 +4465,31 @@ SELECT
         WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
         ELSE NULL
     END                                                    AS ratio,
-    -- 三期口径第2节：SKC销售计划标签(关联商品维表取单值,SKC维度当前时间常量)
-    sc.sales_plan_tag                                      AS sales_plan_tag,
     sc.brand                                               AS brand,
     sc.shelf_date                                          AS shelf_date,
     sc.order_qty                                           AS order_qty,
-    -- 三期口径第4节：plan_pre 按 sales_plan_tag 分3种逻辑(超周期为0,来自 plan_pre_final)
-    sc.plan_pre_final                                      AS plan_pre,
-    -- 三期口径第4节：plan_post 按 sales_plan_tag 分3种逻辑(超周期为0,来自 plan_post_final)
-    sc.plan_post_final                                     AS plan_post,
-    -- 三期口径第3节：SKC计划销量辅助字段(有actual_qty取actual_qty,无则取plan_post_value,超周期为NULL)
-    sc.plan_post_assist                                    AS plan_post_assist,
+    -- 口径6.3节：(Q - cum_actual(N)) * ratio （超周期为NULL）
+    CASE WHEN sc.lifecycle_day BETWEEN 1 AND 180
+         THEN (CAST(sc.order_qty AS DECIMAL(18,6))
+               - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
+              * CASE
+                  WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
+                  WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
+                  WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
+                END
+         ELSE NULL
+    END                                                    AS plan_pre,
+    -- 口径6.4节：plan_post = (Q - cum_actual(N)) * ratio / (181 - N)
+    --    cum_actual(N) = 截至N-1天的累计销量（在连续日历上计算，修复稀疏断档Bug）
+    --    超周期为NULL
+    sc.plan_post_value                                     AS plan_post,
     -- 口径6.5节：实际销售 = 第N天的 SUM(qty)，没销量的日期为0
     sc.actual_qty                                          AS actual_qty,
     sc.actual_amt                                          AS actual_amt,
     -- 累计实际销量 = 截至N-1天的 SUM(qty)
     COALESCE(sc.cum_actual, 0)                             AS cum_actual,
     COALESCE(sc.cum_actual_amt, 0)                         AS cum_actual_amt,
-    -- SKC累计计划销量 = 截至N-1天的 SUM(plan_post_final)，超周期段累计为 NULL
+    -- SKC累计计划销量 = 截至N-1天的 SUM(plan_post)，超周期段累计为 NULL
     sc.cum_plan_qty                                        AS cum_plan_qty,
     -- SKC累计计划金额 = 截至N-1天，占位0（后续补全）
     CAST(0 AS DECIMAL(18,6))                               AS cum_plan_amt,
@@ -5006,10 +4497,18 @@ SELECT
     --   超周期段 cum_plan_qty 为 NULL，结果为 NULL
     CAST(sc.cum_plan_qty AS DECIMAL(18,6))
         / NULLIF(CAST(sc.order_qty AS DECIMAL(18,6)), 0) AS should_achieve_ratio,
-    -- 口径6.6节：达成情况 = actual_qty / plan_post(三期使用 plan_post_final)
+    -- 口径6.6节：达成情况 = actual_qty / plan_post
     CASE WHEN sc.lifecycle_day BETWEEN 1 AND 180
          THEN CAST(sc.actual_qty AS DECIMAL(18,6))
-              / NULLIF(sc.plan_post_final, 0)
+              / NULLIF(
+                  (CAST(sc.order_qty AS DECIMAL(18,6))
+                   - CAST(COALESCE(sc.cum_actual, 0) AS DECIMAL(18,6)))
+                  * CASE
+                      WHEN sc.lifecycle_day BETWEEN 1 AND 30    THEN CAST(0.8 AS DECIMAL(18,6))
+                      WHEN sc.lifecycle_day BETWEEN 31 AND 120  THEN CAST(1.1 AS DECIMAL(18,6))
+                      WHEN sc.lifecycle_day BETWEEN 121 AND 180 THEN CAST(1.0 AS DECIMAL(18,6))
+                    END
+                  / NULLIF(181 - sc.lifecycle_day, 0), 0)
          ELSE NULL
     END                                                    AS achievement_rate,
     sc.inventory_sku                                       AS inventory_sku,
