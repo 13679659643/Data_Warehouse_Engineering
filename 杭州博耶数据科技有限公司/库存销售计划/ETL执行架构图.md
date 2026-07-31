@@ -2,7 +2,7 @@
 
 > 编写日期：2026-07-30
 > 适用范围：韦德品牌库存销售计划全流程
-> 数据源：飞书多维表格（50张分表）
+> 数据源：飞书多维表格（50张分表）、360度数据库（1张表）等等
 > 数据仓库：StarRocks
 > 下游消费：QuickBI 仪表板
 
@@ -140,64 +140,9 @@
 
 ---
 
-## 三、表清单与职责说明
+## 三、调度执行建议
 
-### 3.1 DWD 层（明细层）
-
-| 序号 | 表名 | 职责 | 刷新周期 |
-|------|------|------|---------|
-| 1 | `feishu_dwd.dwd_feishu_sales_wd_d` | 韦德品牌销售日明细（核心4渠道+其他渠道） | 日 |
-| 1.1 | `feishu_dwd.dwd_feishu_sales_all_d` | 全品牌（韦德+361）销售日明细汇总 | 日 |
-| 2 | `feishu_dwd.dwd_feishu_product_wd_d` | 韦德品牌商品维表 | 日 |
-| 2.1 | `feishu_dwd.dwd_feishu_product_all_d` | 全品牌商品维表汇总 | 日 |
-| 3 | `feishu_dwd.dwd_feishu_inventory_wdpinpai_d` | 库存日明细（多品牌） | 日 |
-| 4 | `feishu_dwd.dwd_feishu_otb_wd_d` | 韦德OTB采购预算表 | 日 |
-| 5 | `feishu_dwd.dwd_feishu_brand_order_arrival_d` | 品牌订货到货表 | 日 |
-
-### 3.2 DWS 层（汇总层）
-
-| 序号 | 表名 | 职责 | 依赖 | 刷新周期 |
-|------|------|------|------|---------|
-| 6 | `feishu_dws.dws_sku_product_info_d` | SKU商品信息维表（含评级、销售计划标签等） | DWD 1、2 | 日 |
-| 6 | `feishu_dws.dws_skc_product_info_d` | SKC商品信息维表 | DWD 1、2 | 日 |
-| 6.1 | `feishu_dws.dws_sku_sales_plan_180d_d` | SKU维度1~180天销售计划表 | DWS 6 | 日 |
-| 6.1 | `feishu_dws.dws_skc_sales_plan_180d_d` | SKC维度1~180天销售计划表 | DWS 6 | 日 |
-| 6.2 | `feishu_dws.dws_sku_abnormal_d` | SKU异常表（style_no_size/shelf_date为空等） | DWS 6 | 日 |
-| 6.2 | `feishu_dws.dws_skc_abnormal_d` | SKC异常表 | DWS 6 | 日 |
-
-### 3.3 ADS 层（应用层）
-
-| 序号 | 表名 | 职责 | 依赖 | 刷新周期 |
-|------|------|------|------|---------|
-| - | `feishu_ads.ads_sku_sales_plan_180d_d` | SKU维度1~180天销售计划应用表（QuickBI直接消费） | DWS 6、6.1 | 日 |
-| - | `feishu_ads.ads_skc_sales_plan_180d_d` | SKC维度1~180天销售计划应用表（QuickBI直接消费） | DWS 6、6.1 | 日 |
-
----
-
-## 四、关键依赖说明
-
-### 4.1 DWD 层依赖关系
-
-- **1/2/3/4/5 互相独立，可并行执行**：5个DWD表均直接来源于 ODS 层飞书原始数据，互不依赖
-- **1.1 依赖 1**：`dwd_feishu_sales_all_d` 需在 `dwd_feishu_sales_wd_d` 完成后执行（合并韦德+361销售数据）
-- **2.1 依赖 2**：`dwd_feishu_product_all_d` 需在 `dwd_feishu_product_wd_d` 完成后执行（合并韦德+361商品数据）
-
-### 4.2 DWS 层依赖关系
-
-- **6 依赖 1 和 2**：商品维表 `dws_sku_product_info_d` / `dws_skc_product_info_d` 需关联销售明细和商品维表
-- **6.1 依赖 6**：销售计划表需基于商品维表的 `rating`、`sales_plan_tag`、`shelf_date` 等字段计算计划销量
-- **6.2 依赖 6**：异常表需基于商品维表筛选异常记录（style_no_size/shelf_date 为空等）
-
-### 4.3 ADS 层依赖关系
-
-- **依赖 6 和 6.1**：ADS 表需关联商品维表（取评级、销售计划标签等常量字段）和销售计划表（取计划/实际销量等业务字段）
-- **不依赖 6.2**：异常表仅用于数据质量监控，不参与 ADS 计算
-
----
-
-## 五、调度执行建议
-
-### 5.1 调度顺序
+### 3.1 调度顺序
 
 ```
 Step 1: 并行执行 DWD 1/2/3/4/5
@@ -206,22 +151,3 @@ Step 3: 并行执行 DWS 6（SKU+SKC商品维表，依赖1和2完成）
 Step 4: 并行执行 DWS 6.1/6.2（依赖6完成）
 Step 5: 并行执行 ADS（依赖6和6.1完成）
 ```
-
-### 5.2 调度配置建议
-
-| 配置项 | 建议值 | 说明 |
-|-------|-------|------|
-| 调度周期 | 日 | 每日凌晨执行 |
-| 执行超时 | 2小时 | 全流程超时保护 |
-| 重试次数 | 3次 | 失败自动重试 |
-| 重试间隔 | 5分钟 | 重试间隔时间 |
-| 依赖检查 | 上游成功后执行 | 严格依赖检查 |
-
-### 5.3 数据质量检查点
-
-| 检查点 | 检查内容 | 处理方式 |
-|-------|---------|---------|
-| DWD完成后 | 各表行数 > 0 | 行数为0则告警，阻止下游执行 |
-| DWS 6完成后 | 商品维表行数 > 0，异常表行数占比 < 5% | 异常比例过高则告警 |
-| DWS 6.1完成后 | 销售计划表 plan_post 不全为NULL | 计划为空则告警 |
-| ADS完成后 | ADS表行数 > 0，关键字段无NULL | 关键字段NULL则告警 |
